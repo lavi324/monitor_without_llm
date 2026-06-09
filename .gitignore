@@ -1,0 +1,30 @@
+# Git ignore patterns
+
+# Don't commit password files
+ssh_password_*
+ssh_key_*
+
+# Local environment files
+.env.local
+env.local.properties
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
