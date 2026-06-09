@@ -1,6 +1,12 @@
 AI Service Center App - Setup Instructions
 
-Step 1: Run Docker secret setup:
+Step 1: New package placement
+
+
+
+
+
+Step 2: Run Docker secret setup:
 
 A) Navigate to the directory that contains setup-secrets.sh (monitor/setup-secrets.sh)
 
@@ -33,7 +39,7 @@ Notes:
 - The script creates a single Docker secret named nodes_config containing all remote node properties.
 - Local node (server) is added automatically by backend through Docker socket.
 - Ensure that port 22 (SSH) is open on all remote servers.
-
+- Ensure that the Docker socket is available at /var/run/docker.sock (if it is located elsewhere, update the frontend service in the Docker Compose file to mount the correct host path).
 
 ______________________________________________________________
 ______________________________________________________________
