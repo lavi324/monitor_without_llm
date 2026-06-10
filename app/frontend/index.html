@@ -863,6 +863,11 @@
             40%      { content: '..'; }
             60%, 100% { content: '...'; }
         }
+        .ai-thinking-dots {
+            display: inline-block;
+            width: 1.6em;
+            text-align: left;
+        }
         .ai-thinking-dots::after {
             content: '.';
             display: inline-block;
@@ -2855,13 +2860,12 @@
 
         function resetLogControls() {
             setTimeRangeValidation(null);
-            currentLogFilterLevel = 'all';
-            currentLogSearchTerm = '';
             allFetchedLogs = [];
             visibleFetchedLogs = [];
             lastRenderedLogRangeKey = '';
             currentRequestedLogCount = 0;
             clearActiveLogDiagnosis(true, true);
+            resetActiveLogViewFilters();
             const fetchBtn = document.getElementById('fetchLogsBtn');
             if (fetchBtn) fetchBtn.disabled = false;
             updateFetchLogsPlacement(false);
@@ -2890,6 +2894,21 @@
             if (logsContainer) {
                 logsContainer.innerHTML = '';
             }
+        }
+
+        function resetActiveLogViewFilters() {
+            currentLogFilterLevel = 'all';
+            currentLogSearchTerm = '';
+
+            const searchLogsInput = document.getElementById('searchLogsInput');
+            if (searchLogsInput) {
+                searchLogsInput.value = '';
+            }
+
+            const searchResultsCount = document.getElementById('searchResultsCount');
+            if (searchResultsCount) {
+                searchResultsCount.textContent = '';
+            }
 
             const filterButtons = document.querySelectorAll('.filter-badge, .filter-badge-all');
             filterButtons.forEach(btn => {
@@ -2908,6 +2927,8 @@
             const container = document.getElementById('logsContainer');
             console.log('[fetchLogs] mode: latest');
             clearActiveLogDiagnosis(true, true);
+            // Every explicit fetch starts from a clean view: no level filter and no keyword filter.
+            resetActiveLogViewFilters();
             
             container.innerHTML = '<div class="no-logs">Loading logs<span class="ai-thinking-dots"></span></div>';
             

@@ -1,4 +1,4 @@
-AI Service Center App - Setup Instructions
+Service Center App - Setup Instructions
 
 Step 1: New package placement
 
