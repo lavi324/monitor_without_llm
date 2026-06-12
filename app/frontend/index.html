@@ -831,6 +831,16 @@
             z-index: 10000;
         }
 
+        #logsModal .modal-content {
+            width: 98%;
+            max-width: 1700px;
+        }
+
+        #logsModal .modal-body {
+            padding: 20px 24px 24px;
+            overflow: hidden;
+        }
+
         @keyframes fadeIn {
             from { opacity: 0; }
             to { opacity: 1; }
@@ -1234,6 +1244,25 @@
         .logs-container {
             display: block;
             position: relative;
+            border: 1px solid #d9dcea;
+            border-radius: 8px;
+            background: #ffffff;
+            max-height: 62vh;
+            overflow: auto;
+            margin-top: 20px;
+        }
+
+        .log-stream {
+            margin: 0;
+            padding: 14px 16px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.45;
+            color: #1b1b1b;
+            white-space: pre-wrap;
+            word-break: break-word;
+            direction: ltr;
+            text-align: left;
         }
 
         .log-entry {
@@ -2526,24 +2555,21 @@
         }
 
         function scrollLogsToNewest() {
-            const modalBody = getLogsModalBody();
-            if (!modalBody) return;
+            const container = document.getElementById('logsContainer');
+            if (!container) return;
 
             requestAnimationFrame(() => {
-                modalBody.scrollTop = modalBody.scrollHeight;
-                scheduleLogViewportRender(true);
+                container.scrollTop = container.scrollHeight;
                 updateExportFetchedBtnVisibility();
             });
         }
 
         function scrollLogsToTop() {
-            const modalBody = getLogsModalBody();
             const container = document.getElementById('logsContainer');
-            if (!modalBody || !container) return;
+            if (!container) return;
 
             requestAnimationFrame(() => {
-                modalBody.scrollTop = Math.max(0, container.offsetTop - 12);
-                scheduleLogViewportRender(true);
+                container.scrollTop = 0;
                 updateExportFetchedBtnVisibility();
             });
         }
@@ -2558,8 +2584,8 @@
                 return;
             }
 
-            const modalBody = getLogsModalBody();
-            const atTop = !modalBody || modalBody.scrollTop <= 5;
+            const logsContainer = document.getElementById('logsContainer');
+            const atTop = !logsContainer || logsContainer.scrollTop <= 5;
             exportFetchedBtn.style.display = atTop ? 'inline-block' : 'none';
         }
 
@@ -2746,10 +2772,10 @@
             if (exportFetchedBtnScrollHandlerInitialized) return;
             exportFetchedBtnScrollHandlerInitialized = true;
 
-            const modalBody = getLogsModalBody();
-            if (!modalBody) return;
+            const logsContainer = document.getElementById('logsContainer');
+            if (!logsContainer) return;
 
-            modalBody.addEventListener('scroll', updateExportFetchedBtnVisibility, { passive: true });
+            logsContainer.addEventListener('scroll', updateExportFetchedBtnVisibility, { passive: true });
         }
 
         function updateFetchLogsPlacement(hasFetchedLogs = false) {
@@ -2981,7 +3007,8 @@
                 }
                 
                 console.log('[fetchLogs] Parsing JSON response...');
-                const logs = await response.json();
+                const logsResponse = await response.json();
+                const logs = Array.isArray(logsResponse) ? logsResponse : [];
                 console.log('[fetchLogs] Received logs:', logs.length, 'entries');
                 updateFetchLogsPlacement(true);
                 
@@ -2994,7 +3021,7 @@
                     return;
                 }
 
-                renderLogs(logs);
+                renderLogs(logs, requestedCount);
                 console.log('[fetchLogs] === END SUCCESS ===');
             } catch (err) {
                 console.error('[fetchLogs] === END ERROR ===');
@@ -3116,7 +3143,7 @@
             return escapedText.replace(regex, '<mark style="background: #ffeb3b; padding: 0 2px; border-radius: 2px;">$1</mark>');
         }
 
-        function renderLogs(logs) {
+        function renderLogs(logs, requestedCount = currentRequestedLogCount) {
             const container = document.getElementById('logsContainer');
 
             if (!logs || logs.length === 0) {
@@ -3127,7 +3154,16 @@
                 return;
             }
 
-            allFetchedLogs = sortLogsOldestFirst(logs).map((log, index) => ({ ...log, __sourceIndex: index }));
+            // Ensure frontend shows exactly the requested newest rows whenever available.
+            const sortedLogs = sortLogsOldestFirst(Array.isArray(logs) ? logs : []);
+            const normalizedRequested = Number.isFinite(requestedCount) && requestedCount > 0
+                ? requestedCount
+                : sortedLogs.length;
+            const effectiveLogs = sortedLogs.length > normalizedRequested
+                ? sortedLogs.slice(sortedLogs.length - normalizedRequested)
+                : sortedLogs;
+
+            allFetchedLogs = effectiveLogs.map((log, index) => ({ ...log, __sourceIndex: index }));
             applyLogViewFilters({ resetMeasurement: true, scrollToNewest: true });
         }
 
@@ -3151,8 +3187,7 @@
 
         function renderLogPage(force = false) {
             const container = document.getElementById('logsContainer');
-            const modalBody = getLogsModalBody();
-            if (!container || !modalBody) return;
+            if (!container) return;
 
             if (!visibleFetchedLogs.length) {
                 const emptyMessage = allFetchedLogs.length
@@ -3163,57 +3198,22 @@
                 return;
             }
 
-            const totalLogs = visibleFetchedLogs.length;
-            const containerTop = container.offsetTop;
-            const viewportHeight = Math.max(modalBody.clientHeight, virtualLogRowHeight * 6);
-            const totalCanvasHeight = totalLogs * virtualLogRowHeight;
-            const maxViewportTop = Math.max(0, totalCanvasHeight - viewportHeight);
-            const viewportTop = Math.min(
-                Math.max(0, modalBody.scrollTop - containerTop),
-                maxViewportTop
-            );
-            const firstVisibleIndex = Math.max(0, Math.min(totalLogs - 1, Math.floor(viewportTop / virtualLogRowHeight)));
-            const visibleRowCount = Math.max(1, Math.ceil(viewportHeight / virtualLogRowHeight));
-            const start = Math.max(0, firstVisibleIndex - LOG_OVERSCAN_ROWS);
-            const end = Math.min(totalLogs, firstVisibleIndex + visibleRowCount + LOG_OVERSCAN_ROWS);
-            const rangeKey = `${start}:${end}:${totalLogs}:${currentLogFilterLevel}:${currentLogSearchTerm}`;
-
+            const rangeKey = `${visibleFetchedLogs.length}:${currentLogFilterLevel}:${currentLogSearchTerm}`;
             if (!force && rangeKey === lastRenderedLogRangeKey) {
                 return;
             }
 
             lastRenderedLogRangeKey = rangeKey;
 
-            const pageLogs = visibleFetchedLogs.slice(start, end);
-
-            const logsHtml = pageLogs.map((log, index) => {
-                const level = (log.level || 'info').toLowerCase();
-                const levelClass = `level-${level}`;
-                const cleanMessage = log.message || '';
-                const absoluteIndex = Number.isInteger(log.__sourceIndex) ? log.__sourceIndex : (start + index);
-                const logId = `log-msg-${absoluteIndex}`;
-                const topOffset = (start + index) * virtualLogRowHeight;
-                const diagnoseButtonHtml = '';
-
-                return `
-                    <div class="log-entry virtual-log-entry ${levelClass}" style="top: ${topOffset}px; height: ${virtualLogRowHeight - 10}px;">
-                        <div class="log-header">
-                            <span class="log-timestamp">${escapeHtml(formatLogTimestamp(log.timestamp))}</span>
-                            <div class="log-meta">
-                                <span class="log-level ${levelClass}">${level}</span>
-                                <button class="copy-log-btn" onclick="copyLogMessage('${logId}')" title="Copy log message" style="padding: 4px 8px; font-size: 11px; background: #e3f2fd; color: #1976d2; border: 1px solid #90caf9; border-radius: 4px; cursor: pointer; margin-left: 8px;">📋 Copy</button>
-                                ${diagnoseButtonHtml}
-                            </div>
-                        </div>
-                        <div class="log-message" id="${logId}">${highlightLogMessage(cleanMessage, currentLogSearchTerm)}</div>
-                    </div>
-                `;
-            }).join('');
+            const streamText = visibleFetchedLogs.map((log) => {
+                const timestamp = formatLogTimestamp(log.timestamp || '');
+                const level = String(log.level || 'info').toUpperCase();
+                const message = String(log.message || '');
+                return `${timestamp} ${level} ${message}`;
+            }).join('\n');
 
             container.innerHTML = `
-                <div style="position: relative; height: ${totalCanvasHeight}px; min-height: ${Math.min(totalCanvasHeight, virtualLogRowHeight)}px;">
-                    ${logsHtml}
-                </div>
+                <pre class="log-stream">${highlightLogMessage(streamText, currentLogSearchTerm)}</pre>
                 ${renderFetchedLogsSummary()}
             `;
 
@@ -3235,77 +3235,6 @@
                 exportFetchedBtn.dataset.available = '1';
                 initExportFetchedBtnScrollBehavior();
                 updateExportFetchedBtnVisibility();
-            }
-        }
-
-        function copyLogMessage(logId) {
-            const logMessageElement = document.getElementById(logId);
-            if (!logMessageElement) {
-                console.error('Log element not found:', logId);
-                return;
-            }
-            
-            // Get the parent log-entry div
-            const logEntry = logMessageElement.closest('.log-entry');
-            if (!logEntry) {
-                console.error('Log entry parent not found');
-                return;
-            }
-            
-            // Get timestamp
-            const timestampEl = logEntry.querySelector('.log-timestamp');
-            const timestamp = timestampEl ? timestampEl.textContent.trim() : '';
-            
-            // Get error level
-            const levelEl = logEntry.querySelector('.log-level');
-            const level = levelEl ? levelEl.textContent.trim().toUpperCase() : '';
-            
-            // Get message
-            const message = logMessageElement.textContent || logMessageElement.innerText;
-            
-            // Format: timestamp | level | message
-            const copyText = `${timestamp} | ${level} | ${message}`;
-            
-            // Use fallback method that works without HTTPS
-            const textArea = document.createElement('textarea');
-            textArea.value = copyText;
-            textArea.style.position = 'fixed';
-            textArea.style.left = '-9999px';
-            textArea.style.top = '-9999px';
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            
-            let success = false;
-            try {
-                success = document.execCommand('copy');
-            } catch (err) {
-                console.error('Fallback copy failed:', err);
-            }
-            
-            document.body.removeChild(textArea);
-            
-            // Show feedback
-            const btn = logEntry.querySelector('.copy-log-btn');
-            if (btn) {
-                const originalText = btn.textContent;
-                if (success) {
-                    btn.textContent = '✓ Copied!';
-                    btn.style.background = '#4caf50';
-                    btn.style.color = 'white';
-                    btn.style.borderColor = '#4caf50';
-                } else {
-                    btn.textContent = '✗ Failed';
-                    btn.style.background = '#f44336';
-                    btn.style.color = 'white';
-                    btn.style.borderColor = '#f44336';
-                }
-                setTimeout(() => {
-                    btn.textContent = originalText;
-                    btn.style.background = '#e3f2fd';
-                    btn.style.color = '#1976d2';
-                    btn.style.borderColor = '#90caf9';
-                }, 1500);
             }
         }
 
@@ -3469,7 +3398,7 @@
                 const messageNodeFilterLabel = document.getElementById('messageNodeFilterLabel');
                 if (messageNodeFilterLabel) messageNodeFilterLabel.style.display = 'none';
                 // Clear services container to show it's loading
-                document.getElementById('servicesContainer').innerHTML = '<div class="loading" style="display:block;">Loading services...</div>';
+                document.getElementById('servicesContainer').innerHTML = '<div class="loading" style="display:block; color:#555;">Loading Services<span class="ai-thinking-dots"></span></div>';
                 
                 try {
                     await fetchData();
