@@ -832,6 +832,11 @@
         }
 
         #logsModal .modal-content {
+            width: 95%;
+            max-width: 900px;
+        }
+
+        #logsModal .modal-content.logs-wide {
             width: 98%;
             max-width: 1700px;
         }
@@ -839,6 +844,9 @@
         #logsModal .modal-body {
             padding: 20px 24px 24px;
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
         }
 
         @keyframes fadeIn {
@@ -1247,9 +1255,21 @@
             border: 1px solid #d9dcea;
             border-radius: 8px;
             background: #ffffff;
-            max-height: 62vh;
+            flex: 0 0 auto;
+            min-height: 90px;
+            max-height: 180px;
             overflow: auto;
             margin-top: 20px;
+        }
+
+        .logs-container.pre-fetch-hidden {
+            display: none;
+        }
+
+        .logs-container.expanded {
+            flex: 1 1 auto;
+            min-height: 260px;
+            max-height: none;
         }
 
         .log-stream {
@@ -1535,7 +1555,7 @@
                         <button class="filter-badge-all" onclick="filterLogsByLevel('all')" style="opacity: 1; padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">All Logs</button>
                     </div>
                 </div>
-                <div class="logs-container" id="logsContainer" style="margin-top: 20px;"></div>
+                <div class="logs-container pre-fetch-hidden" id="logsContainer" style="margin-top: 20px;"></div>
             </div>
         </div>
     </div>
@@ -2797,6 +2817,12 @@
             }
         }
 
+        function setLogsModalWideState(isWide) {
+            const logsModalContent = document.querySelector('#logsModal .modal-content');
+            if (!logsModalContent) return;
+            logsModalContent.classList.toggle('logs-wide', Boolean(isWide));
+        }
+
         function openLogsModal(serviceId, serviceName) {
             console.log('[openLogsModal] Opening modal for service:', serviceName, 'currentNodeName:', currentNodeName);
             currentServiceId = serviceId;
@@ -2808,11 +2834,15 @@
             console.log('[openLogsModal] After clearing, window.__logsNodeName:', window.__logsNodeName, 'currentNodeName:', currentNodeName);
             
             document.getElementById('logsModal').classList.add('show');
+            setLogsModalWideState(false);
             initExportFetchedBtnScrollBehavior();
             initLogsVirtualScrollBehavior();
             updateExportFetchedBtnVisibility();
             // Don't hide anything - keep the background as is
-            document.getElementById('logsContainer').innerHTML = '';
+            const logsContainer = document.getElementById('logsContainer');
+            logsContainer.innerHTML = '';
+            logsContainer.classList.remove('expanded');
+            logsContainer.classList.add('pre-fetch-hidden');
         }
 
         function openLogsModalForUnhealthy(serviceId, serviceName, nodeName) {
@@ -2832,14 +2862,19 @@
             if (servicesSection) servicesSection.style.display = 'none';
             
             document.getElementById('logsModal').classList.add('show');
+            setLogsModalWideState(false);
             initExportFetchedBtnScrollBehavior();
             initLogsVirtualScrollBehavior();
             updateExportFetchedBtnVisibility();
-            document.getElementById('logsContainer').innerHTML = '';
+            const logsContainer = document.getElementById('logsContainer');
+            logsContainer.innerHTML = '';
+            logsContainer.classList.remove('expanded');
+            logsContainer.classList.add('pre-fetch-hidden');
         }
 
         function closeLogsModal() {
             document.getElementById('logsModal').classList.remove('show');
+            setLogsModalWideState(false);
             // Show services section again
             const servicesSection = document.getElementById('servicesSection');
             if (servicesSection) servicesSection.style.display = 'block';
@@ -2865,6 +2900,12 @@
                 errorLevelFilter.style.display = 'none';
             }
             updateFetchLogsPlacement(false);
+
+            const logsContainerEl = document.getElementById('logsContainer');
+            if (logsContainerEl) {
+                logsContainerEl.classList.remove('expanded');
+                logsContainerEl.classList.add('pre-fetch-hidden');
+            }
             const exportFetchedBtn = document.getElementById('exportFetchedBtn');
             if (exportFetchedBtn) {
                 exportFetchedBtn.dataset.available = '0';
@@ -2878,9 +2919,8 @@
                 document.getElementById('searchResultsCount').textContent = '';
             }
 
-            const logsContainer = document.getElementById('logsContainer');
-            if (logsContainer) {
-                logsContainer.innerHTML = '';
+            if (logsContainerEl) {
+                logsContainerEl.innerHTML = '';
             }
         }
 
@@ -2949,6 +2989,8 @@
                 console.error('[fetchLogs] ERROR: No currentServiceId');
                 return;
             }
+
+            setLogsModalWideState(true);
             
             const container = document.getElementById('logsContainer');
             console.log('[fetchLogs] mode: latest');
@@ -2957,6 +2999,7 @@
             resetActiveLogViewFilters();
             
             container.innerHTML = '<div class="no-logs">Loading logs<span class="ai-thinking-dots"></span></div>';
+            container.classList.remove('pre-fetch-hidden');
             
             try {
                 // Use stored node name if fetching logs from unhealthy services, otherwise use current node
@@ -3150,9 +3193,13 @@
                 updateFilterOptions(new Set());
                 allFetchedLogs = [];
                 visibleFetchedLogs = [];
+                container.classList.remove('pre-fetch-hidden');
+                container.classList.remove('expanded');
                 container.innerHTML = '<div class="no-logs">No logs found</div>';
                 return;
             }
+
+            container.classList.add('expanded');
 
             // Ensure frontend shows exactly the requested newest rows whenever available.
             const sortedLogs = sortLogsOldestFirst(Array.isArray(logs) ? logs : []);
@@ -3168,26 +3215,15 @@
         }
 
         function renderFetchedLogsSummary() {
-            if (!allFetchedLogs.length) return '';
-
-            const requestedCount = currentRequestedLogCount || allFetchedLogs.length;
-            const fetchedCount = allFetchedLogs.length;
-            const requestedLabel = requestedCount.toLocaleString();
-            const fetchedLabel = fetchedCount.toLocaleString();
-            const summary = fetchedCount === requestedCount
-                ? `Fetched ${fetchedLabel} log rows.`
-                : `Requested ${requestedLabel} log rows, fetched ${fetchedLabel}.`;
-
-            return `
-                <div style="margin-top: 14px; text-align: center; color: #666; font-size: 13px; font-weight: 600; padding: 12px 16px; background: #f7f7fb; border: 1px solid #ececf5; border-radius: 8px;">
-                    ${summary}
-                </div>
-            `;
+            return '';
         }
 
         function renderLogPage(force = false) {
             const container = document.getElementById('logsContainer');
             if (!container) return;
+
+            container.classList.toggle('pre-fetch-hidden', allFetchedLogs.length === 0 && currentRequestedLogCount === 0);
+            container.classList.toggle('expanded', allFetchedLogs.length > 0);
 
             if (!visibleFetchedLogs.length) {
                 const emptyMessage = allFetchedLogs.length
