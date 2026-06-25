@@ -364,7 +364,7 @@
             position: relative;
             left: 50%;
             transform: translateX(-50%);
-            overflow-x: auto;
+            overflow-x: hidden;   /* never show a horizontal scrollbar */
             padding-bottom: 6px;
         }
 
@@ -385,6 +385,7 @@
             align-items: center;
             justify-content: space-between;
             gap: 8px;
+            overflow: hidden;   /* narrow columns clip rather than force page scroll */
         }
 
         /* Left block: compact host CPU / RAM / disk usage, stacked. */
@@ -397,7 +398,9 @@
             font-weight: 600;
             color: #e5e7eb;
             text-align: left;
-            flex: 0 0 56px;
+            flex: 0 1 56px;
+            min-width: 0;
+            overflow: hidden;
             white-space: nowrap;
         }
         .node-head-usage .nh-stat b {
@@ -410,13 +413,15 @@
 
         /* Center: node name (stays in the middle). */
         .node-head-name {
-            flex: 1;
+            flex: 1 1 auto;
             text-align: center;
             font-weight: 700;
             font-size: 14px;
             letter-spacing: 0.3px;
-            word-break: break-word;
             min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         /* Right block: healthy / unhealthy service counts (x/y). */
@@ -424,7 +429,8 @@
             display: flex;
             flex-direction: column;
             align-items: stretch;
-            flex: 0 0 56px;
+            flex: 0 1 56px;
+            min-width: 0;
             font-size: 14px;
             font-weight: 800;
             line-height: 1.25;
@@ -2121,10 +2127,11 @@
             }
 
             const cols = Math.min(nodes.length, 10);
-            // Equal columns (symmetric). minmax keeps each at least 150px wide so
-            // service names stay readable; if all columns can't fit, the board
-            // scrolls horizontally instead of squashing them.
-            container.style.gridTemplateColumns = `repeat(${cols}, minmax(150px, 1fr))`;
+            // Equal columns (symmetric). minmax(0, 1fr) lets every column shrink to
+            // fit so up to 10 columns ALWAYS fit the width with no horizontal
+            // scrollbar — the tracks sum exactly to the board width. Names/tiles
+            // shrink (ellipsis / wrap) rather than forcing a horizontal scroll.
+            container.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
 
             container.innerHTML = nodes.map(node => {
                 // Red (unhealthy) services first — sorted a–z — then green (healthy)
@@ -2153,7 +2160,7 @@
                     <div class="node-column">
                         <div class="node-head" data-node="${escapeHtml(node.name)}">
                             <div class="node-head-usage">${usageHtml}</div>
-                            <div class="node-head-name">${escapeHtml(node.name)}</div>
+                            <div class="node-head-name" title="${escapeHtml(node.name)}">${escapeHtml(node.name)}</div>
                             <div class="node-head-count" title="${healthyCount} healthy / ${unhealthyCount} unhealthy">
                                 <span class="nh-up">${healthyCount}</span><span class="nh-down">${unhealthyCount}</span>
                             </div>

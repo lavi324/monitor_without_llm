@@ -1,11 +1,15 @@
 Service Center App - Setup Instructions
 
+
+
 Step 1: New package placement
 
 A) Place the monitor app package in the deployment directory (e.g. /home/ta9/app_version/stacks)
 
 B) Extract the package
 Run: tar -xvf monitor.tar
+
+
 
 Step 2: Run Docker secret setup:
 
@@ -23,11 +27,9 @@ The script will first ask how many remote nodes (servers) you want to monitor, t
 
 D) Execute ./setup-secrets.sh and provide all the required details.
 
+
+
 Step 3: Deploy the Monitor app:
-
-
-makeeeeeeeeeeeee sure you have at leat 1 node that is a sworm manager
-
 
 A) Navigate to the directory that contains the deploy.sh script (e.g. /home/ta9/app_version) and execute ./deploy.sh -f monitor
 
@@ -35,7 +37,11 @@ B) Wait for services to start.
 
 C) Open the Monitor app: http://IP_ADDRESS:8081
 
+
 Done.
+
+
+
 
 Notes:
 - The script creates a single Docker secret named nodes_config containing all remote node properties.
