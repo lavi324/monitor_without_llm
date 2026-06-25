@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TA9 Service Center</title>
-    <link rel="icon" type="image/png" id="favicon" href="ta9_service.png">
+    <link rel="icon" type="image/png" id="favicon" href="ta9_logo.png">
     <style>
         * {
             margin: 0;
@@ -14,9 +14,35 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            /* Layered blue background: a deep→bright blue gradient with fine
+               diagonal pinstripes on top for texture (not a flat, boring fill). */
+            background:
+                repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.05) 0, rgba(255, 255, 255, 0.05) 1px, transparent 1px, transparent 22px),
+                linear-gradient(135deg, #0b2f7a 0%, #1d4ed8 45%, #2563eb 70%, #0ea5e9 100%);
+            background-attachment: fixed;
             min-height: 100vh;
             padding: 20px;
+            position: relative;
+        }
+
+        /* Soft, slowly-drifting colour glows for depth and a bit of life. Fixed and
+           behind the content so it never interferes with scrolling or clicks. */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 18% 22%, rgba(56, 189, 248, 0.30), transparent 38%),
+                radial-gradient(circle at 82% 12%, rgba(129, 140, 248, 0.28), transparent 42%),
+                radial-gradient(circle at 65% 88%, rgba(14, 165, 233, 0.22), transparent 45%);
+            animation: bgGlowDrift 20s ease-in-out infinite alternate;
+        }
+
+        @keyframes bgGlowDrift {
+            0%   { transform: translate3d(0, 0, 0) scale(1); opacity: 0.85; }
+            100% { transform: translate3d(0, -2%, 0) scale(1.08); opacity: 1; }
         }
 
         .container {
@@ -30,6 +56,17 @@
             border-radius: 10px;
             margin-bottom: 30px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+
+        /* Logo pinned to the top-left corner of the header card. */
+        .header-logo {
+            position: absolute;
+            top: 22px;
+            left: 30px;
+            height: 48px;
+            width: auto;
+            z-index: 2;
         }
 
         .header-top {
@@ -51,7 +88,7 @@
         }
 
         .header h1 {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -248,6 +285,31 @@
             text-align: center;
             color: #999;
             padding: 20px;
+        }
+
+        /* Search + Filter-by-Node controls when moved into the Unhealthy dropdown. */
+        #messagesFilters label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #555;
+            font-weight: 600;
+            font-size: 14px;
+            white-space: nowrap;
+            margin: 0;
+        }
+        #messagesFilters select {
+            padding: 8px 12px;
+            border: 1px solid #cfd6ea;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            background: #fff;
+        }
+        #messagesFilters #searchInput {
+            flex: 0 0 auto;
+            width: 260px !important;
+            min-width: 0;
         }
 
         #searchInput {
@@ -472,6 +534,9 @@
             gap: 12px;
                 flex: 0 0 300px;
                 min-width: 300px;
+            border-bottom: none;
+            padding-bottom: 0;
+            margin-bottom: 0;
         }
 
         .card-actions {
@@ -839,7 +904,14 @@
         #logsModal .modal-content.logs-wide {
             width: 98%;
             max-width: 1700px;
+            height: 90vh;
         }
+
+        /* Three equal columns: left / middle / right. Each section is hard-placed
+           in its column and aligned to the outer edges, so the middle (count +
+           Fetch) is always dead-centre and the row stays symmetric regardless of
+           how many filter badges are visible. Empty columns keep it centred even
+           before fetching, when only the middle section is shown. */
 
         #logsModal .modal-body {
             padding: 20px 24px 24px;
@@ -1285,6 +1357,83 @@
             text-align: left;
         }
 
+        /* Continuation rows of a multi-line entry (stack-trace frames): indented one
+           tab right. padding-left (not text-indent/tab) so soft-wrapped portions of a
+           long frame stay indented too — only the entry's first row sits at the base. */
+        .log-stream .log-cont-row {
+            display: block;
+            padding-left: 4ch;
+        }
+
+        /* Each log entry is a clickable row that can be highlighted on click,
+           like Portainer. Negative inline margin + matching padding makes the
+           hover/selected highlight span the full width past the <pre> padding. */
+        .log-stream .log-row {
+            display: block;
+            cursor: pointer;
+            margin: 0 -16px;
+            padding: 1px 16px;
+        }
+        .log-stream .log-row:hover {
+            background: #eef2ff;
+        }
+        .log-stream .log-row.selected {
+            background: #d7e3ff;
+        }
+
+        /* Flat, single-tone (Portainer-style) toolbar buttons for the logs modal.
+           Replaces the previously multi-coloured action buttons and level badges
+           with white buttons + blue text/border. Scoped to #logsControlBar and
+           uses !important to neutralise the per-button inline colours. */
+        #logsControlBar button,
+        #logsControlBar .filter-badge,
+        #logsControlBar .filter-badge-all {
+            background: #ffffff !important;
+            color: #2563eb !important;
+            border: 1px solid #d5def5 !important;
+            border-radius: 6px !important;
+            padding: 8px 12px !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            cursor: pointer;
+            box-shadow: none !important;
+            opacity: 1 !important;
+            text-transform: none !important;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        #logsControlBar button:hover,
+        #logsControlBar .filter-badge:hover,
+        #logsControlBar .filter-badge-all:hover {
+            background: #eff4ff !important;
+            border-color: #2563eb !important;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+        /* Selected filter level */
+        #logsControlBar .filter-badge.active,
+        #logsControlBar .filter-badge-all.active {
+            background: #e0e9ff !important;
+            border-color: #2563eb !important;
+            color: #1e40af !important;
+        }
+
+        /* Small spinner shown above a filter button while the (heavy) re-filter
+           runs, so the UI doesn't look frozen. Uses transform rotation, which the
+           browser animates on the compositor — it keeps spinning even while the
+           main thread is busy rendering. Centred via calc() (no transform) so the
+           rotation animation isn't overridden. */
+        .filter-spinner {
+            position: fixed;        /* on <body>, so the modal's overflow can't clip it */
+            width: 16px;
+            height: 16px;
+            border: 2px solid #c7d2fe;
+            border-top-color: #2563eb;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            z-index: 11000;         /* above the modal (z-index 10000) */
+            pointer-events: none;
+        }
+
         .log-entry {
             background: #f8f9fa;
             border-left: 4px solid #667eea;
@@ -1431,9 +1580,10 @@
 <body>
     <div class="container">
         <div class="header">
+            <img src="ta9_logo.png" alt="TA9" class="header-logo">
+            <h1 style="margin-bottom: 20px;">Service Center</h1>
             <div class="header-top">
                 <div class="header-left">
-                    <h1 style="position: relative;"><img src="ta9_service.png" alt="TA9" style="height: 1.1em; vertical-align: middle; position: absolute; left: 0; top: 50%; transform: translateY(-50%);"> Service Center</h1>
                     <div class="controls">
                         <label>
                             Node:
@@ -1504,8 +1654,13 @@
 
         <div id="content" style="display: none;">
             <div id="messagesSection" class="messages-section" style="display: none;">
-                <h2><span class="status-unhealthy">⚠️</span> Unhealthy Services</h2>
-                <div id="messagesContainer"></div>
+                <h2 id="messagesHeader" onclick="toggleMessages()" style="cursor: pointer; user-select: none;">
+                    <span class="status-unhealthy">⚠️</span> Unhealthy Services
+                    <span id="messagesCount" style="font-size: 13px; font-weight: 700; color: #d32f2f; background: #ffebee; padding: 2px 10px; border-radius: 12px;"></span>
+                    <span id="messagesChevron" style="margin-left: auto; transition: transform 0.2s; font-size: 18px; color: #888;">▾</span>
+                </h2>
+                <div id="messagesFilters" style="display: none; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; padding: 14px 16px; background: #f7f9ff; border: 1px solid #e6ebf7; border-radius: 10px;"></div>
+                <div id="messagesContainer" style="display: none;"></div>
             </div>
             <div class="section" id="servicesSection">
                 <h2>Services</h2>
@@ -1521,33 +1676,30 @@
     <!-- Logs Modal -->
     <div id="logsModal" class="modal">
         <div class="modal-content">
-            <button id="exportFetchedBtn" class="fetch-logs-button" onclick="exportCurrentLogs()" style="display: none; padding: 8px 14px; font-size: 13px; font-weight: 600; min-width: 110px; background: #4caf50; position: absolute; left: 30px; top: 90px; z-index: 100;">Export These Logs</button>
             <div class="modal-header">
                 <h2><span id="modalServiceName"></span></h2>
                 <button class="close-modal" onclick="closeLogsModal()">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="logs-controls">
-                    <div id="latestLogsGroup" style="display: flex; gap: 14px; align-items: flex-end; justify-content: center; width: auto; margin: 0 auto; flex-wrap: wrap;">
-                        <div class="logs-control-group" style="min-width: 170px; width: 170px; margin: 0;">
+                <div id="logsControlBar" style="display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: end; gap: 12px; margin-bottom: 14px;">
+                    <!-- LEFT: export + search + find + clear -->
+                    <div id="searchLogsGroup" class="logs-section" style="grid-column: 1; justify-self: end; min-width: 0; display: none; align-items: center; gap: 8px;">
+                        <button id="exportFetchedBtn" class="fetch-logs-button" onclick="exportCurrentLogs()" style="display: none; padding: 8px 14px; font-size: 13px; font-weight: 600; min-width: 110px; background: #4caf50;">Export These Logs</button>
+                        <input type="text" id="searchLogsInput" placeholder="Search logs..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="padding: 8px 12px; border: 1px solid #cfd2ff; border-radius: 6px; font-size: 13px; width: 140px;">
+                        <button onclick="searchInLogs()" style="padding: 8px 14px; font-size: 13px; font-weight: 600; background: #2196f3; color: white; border: none; border-radius: 6px; cursor: pointer;">🔍 Find</button>
+                        <button onclick="clearLogSearch()" style="padding: 8px 14px; font-size: 13px; font-weight: 600; background: #f44336; color: white; border: none; border-radius: 6px; cursor: pointer;">✕ Clear</button>
+                        <span id="searchResultsCount" style="font-size: 12px; color: #666;"></span>
+                    </div>
+                    <!-- MIDDLE: how many latest logs + fetch -->
+                    <div class="logs-section" style="grid-column: 2; justify-self: center; min-width: 0; display: flex; align-items: flex-end; gap: 12px;">
+                        <div class="logs-control-group" style="min-width: 150px; width: 150px; margin: 0;">
                             <label>How Many Latest Logs?</label>
                             <input type="number" id="logCount" value="50" min="1" max="10000">
                         </div>
+                        <button id="fetchLogsBtn" class="fetch-logs-button" onclick="fetchLogs()" style="padding: 8px 14px; font-size: 13px; font-weight: 600; min-width: 110px; background: #667eea;">Fetch Logs</button>
                     </div>
-                </div>
-                <div id="logsActionRow" style="display: flex; gap: 12px; align-items: center; justify-content: center; margin-top: 12px;">
-                    <button id="fetchLogsBtn" class="fetch-logs-button" onclick="fetchLogs()" style="padding: 8px 14px; font-size: 13px; font-weight: 600; min-width: 110px; background: #667eea;">Fetch Logs</button>
-                    <div id="searchLogsGroup" style="display: none; align-items: center; gap: 8px;">
-                        <input type="text" id="searchLogsInput" placeholder="Search logs..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="padding: 8px 12px; border: 1px solid #cfd2ff; border-radius: 6px; font-size: 13px; width: 180px;">
-                        <button onclick="searchInLogs()" style="padding: 8px 14px; font-size: 13px; font-weight: 600; min-width: 110px; background: #2196f3; color: white; border: none; border-radius: 6px; cursor: pointer;">🔍 Find</button>
-                        <button onclick="clearLogSearch()" style="padding: 8px 14px; font-size: 13px; font-weight: 600; min-width: 110px; background: #f44336; color: white; border: none; border-radius: 6px; cursor: pointer;">✕ Clear</button>
-                        <span id="searchResultsCount" style="font-size: 12px; color: #666;"></span>
-                    </div>
-                </div>
-                <div id="timeRangeValidation" style="display:none; margin-top: 10px; text-align:center; font-size: 13px; font-weight: 600; color: #d32f2f;"></div>
-                <div class="error-level-filter" id="errorLevelFilter" style="display: none; padding: 12px; background: #f5f5f5; border-radius: 8px; margin-top: 12px;">
-                    <div style="color: #666; font-weight: 600; margin-bottom: 10px; text-align: center;">Filter by Error Level:</div>
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+                    <!-- RIGHT: error-level filters -->
+                    <div id="errorLevelFilter" class="logs-section" style="grid-column: 3; justify-self: start; min-width: 0; display: none; align-items: center; gap: 8px; flex-wrap: wrap;">
                         <button class="filter-badge level-error" data-level="error" onclick="filterLogsByLevel('error')" style="opacity: 0.5;">ERROR</button>
                         <button class="filter-badge level-warning" data-level="warning" onclick="filterLogsByLevel('warning')" style="opacity: 0.5;">WARNING</button>
                         <button class="filter-badge info" data-level="info" onclick="filterLogsByLevel('info')" style="opacity: 0.5;">INFO</button>
@@ -1555,6 +1707,7 @@
                         <button class="filter-badge-all" onclick="filterLogsByLevel('all')" style="opacity: 1; padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">All Logs</button>
                     </div>
                 </div>
+                <div id="timeRangeValidation" style="display:none; margin-top: 10px; text-align:center; font-size: 13px; font-weight: 600; color: #d32f2f;"></div>
                 <div class="logs-container pre-fetch-hidden" id="logsContainer" style="margin-top: 20px;"></div>
             </div>
         </div>
@@ -2048,6 +2201,45 @@
             return selector.value || '';
         }
 
+        // Unhealthy Services starts collapsed; the user expands it by clicking the
+        // header. The state persists across the 5s auto-refresh.
+        let messagesCollapsed = true;
+        function applyMessagesCollapseState() {
+            const container = document.getElementById('messagesContainer');
+            const filters = document.getElementById('messagesFilters');
+            const chevron = document.getElementById('messagesChevron');
+            if (container) container.style.display = messagesCollapsed ? 'none' : 'block';
+            if (filters) filters.style.display = messagesCollapsed ? 'none' : 'flex';
+            if (chevron) chevron.style.transform = messagesCollapsed ? 'rotate(0deg)' : 'rotate(180deg)';
+        }
+        function toggleMessages() {
+            messagesCollapsed = !messagesCollapsed;
+            applyMessagesCollapseState();
+        }
+
+        // The Search and Filter-by-Node controls are shared with the per-node view.
+        // On the Home (unhealthy) view we move them INTO the dropdown; on a node
+        // view we move Search back to the header so node-service search still works.
+        function placeUnhealthyFilters(isHome) {
+            const filters = document.getElementById('messagesFilters');
+            const controls = document.querySelector('.controls');
+            const search = document.getElementById('searchInput');
+            const nodeFilter = document.getElementById('messageNodeFilterLabel');
+            const exportControl = document.getElementById('exportControl');
+            if (!filters || !controls || !search) return;
+            if (isHome) {
+                if (nodeFilter && nodeFilter.parentElement !== filters) filters.appendChild(nodeFilter);
+                if (search.parentElement !== filters) filters.appendChild(search);
+            } else {
+                if (nodeFilter && nodeFilter.parentElement !== controls) {
+                    exportControl ? controls.insertBefore(nodeFilter, exportControl) : controls.appendChild(nodeFilter);
+                }
+                if (search.parentElement !== controls) {
+                    exportControl ? controls.insertBefore(search, exportControl) : controls.appendChild(search);
+                }
+            }
+        }
+
         function renderMessages(messages) {
             latestMessages = Array.isArray(messages) ? messages : [];
             const section = document.getElementById('messagesSection');
@@ -2099,6 +2291,10 @@
             });
 
             section.style.display = 'block';
+            // Show the count in the header and keep the collapsed/expanded state.
+            const countBadge = document.getElementById('messagesCount');
+            if (countBadge) countBadge.textContent = unhealthyMessages.length;
+            applyMessagesCollapseState();
             // Update favicon - unhealthy messages exist globally (use full set, not filtered)
             updateFavicon(allServices, unhealthyMessages);
 
@@ -2181,7 +2377,7 @@
             if (!link) return;
 
             link.type = 'image/png';
-            link.href = appFaviconDataUrl || 'ta9_service.png';
+            link.href = appFaviconDataUrl || 'ta9_logo.png';
         }
 
         function buildAppFavicon() {
@@ -2244,7 +2440,7 @@
             img.onerror = () => {
                 applyAppFavicon();
             };
-            img.src = 'ta9_service.png';
+            img.src = 'ta9_logo.png';
         }
 
         function updateFavicon() {
@@ -2549,6 +2745,27 @@
             return logsModal ? logsModal.querySelector('.modal-body') : null;
         }
 
+        // Click a log row to highlight it (like Portainer). One delegated listener
+        // on the container survives re-renders. Single selection: clicking a row
+        // selects it (clearing others); clicking it again clears it. A drag to
+        // select text for copying does not toggle the highlight.
+        let logsRowSelectionInitialized = false;
+        function initLogsRowSelection() {
+            if (logsRowSelectionInitialized) return;
+            const container = document.getElementById('logsContainer');
+            if (!container) return;
+            logsRowSelectionInitialized = true;
+            container.addEventListener('click', (e) => {
+                // Don't steal clicks that are actually text selections (copy).
+                if (window.getSelection && String(window.getSelection()).length > 0) return;
+                const row = e.target.closest('.log-row');
+                if (!row || !container.contains(row)) return;
+                const wasSelected = row.classList.contains('selected');
+                container.querySelectorAll('.log-row.selected').forEach(r => r.classList.remove('selected'));
+                if (!wasSelected) row.classList.add('selected');
+            });
+        }
+
         function initLogsVirtualScrollBehavior() {
             if (logsVirtualScrollHandlerInitialized) return;
             logsVirtualScrollHandlerInitialized = true;
@@ -2599,14 +2816,8 @@
             if (!exportFetchedBtn) return;
 
             const isAvailable = exportFetchedBtn.dataset.available === '1';
-            if (!isAvailable) {
-                exportFetchedBtn.style.display = 'none';
-                return;
-            }
-
-            const logsContainer = document.getElementById('logsContainer');
-            const atTop = !logsContainer || logsContainer.scrollTop <= 5;
-            exportFetchedBtn.style.display = atTop ? 'inline-block' : 'none';
+            // Always show the button once logs are available, regardless of scroll.
+            exportFetchedBtn.style.display = isAvailable ? 'inline-block' : 'none';
         }
 
         function clearActiveLogDiagnosisTypingTimer() {
@@ -2918,6 +3129,7 @@
                 document.getElementById('searchLogsInput').value = '';
                 document.getElementById('searchResultsCount').textContent = '';
             }
+            document.getElementById('logsControlBar')?.classList.remove('fetched');
 
             if (logsContainerEl) {
                 logsContainerEl.innerHTML = '';
@@ -2946,6 +3158,7 @@
             if (searchLogsGroup) {
                 searchLogsGroup.style.display = 'none';
             }
+            document.getElementById('logsControlBar')?.classList.remove('fetched');
             // Clear search input
             const searchLogsInput = document.getElementById('searchLogsInput');
             if (searchLogsInput) {
@@ -2990,14 +3203,14 @@
                 return;
             }
 
-            setLogsModalWideState(true);
-            
+            // Keep the modal compact (small loading window) while fetching; it only
+            // expands to the big view once logs actually arrive (see renderLogs).
             const container = document.getElementById('logsContainer');
             console.log('[fetchLogs] mode: latest');
             clearActiveLogDiagnosis(true, true);
             // Every explicit fetch starts from a clean view: no level filter and no keyword filter.
             resetActiveLogViewFilters();
-            
+
             container.innerHTML = '<div class="no-logs">Loading logs<span class="ai-thinking-dots"></span></div>';
             container.classList.remove('pre-fetch-hidden');
             
@@ -3199,6 +3412,8 @@
                 return;
             }
 
+            // Logs arrived — now expand the modal to the big view.
+            setLogsModalWideState(true);
             container.classList.add('expanded');
 
             // Ensure frontend shows exactly the requested newest rows whenever available.
@@ -3231,37 +3446,56 @@
                     : 'No logs found';
                 container.innerHTML = `<div class="no-logs">${emptyMessage}</div>${renderFetchedLogsSummary()}`;
                 updateExportFetchedBtnVisibility();
+                hideFilterSpinner();
                 return;
             }
 
             const rangeKey = `${visibleFetchedLogs.length}:${currentLogFilterLevel}:${currentLogSearchTerm}`;
             if (!force && rangeKey === lastRenderedLogRangeKey) {
+                hideFilterSpinner();
                 return;
             }
 
             lastRenderedLogRangeKey = rangeKey;
 
-            const streamText = visibleFetchedLogs.map((log) => {
+            // Each log entry is its own clickable .log-row block so a click can
+            // highlight it (like Portainer). A multi-line entry (e.g. a stack
+            // trace) keeps its first row at the base column and indents every
+            // continuation row one tab right via block spans (hanging indent).
+            const searchTerm = currentLogSearchTerm;
+            let streamHtml = '';
+            for (const log of visibleFetchedLogs) {
                 const timestamp = formatLogTimestamp(log.timestamp || '');
                 const level = String(log.level || 'info').toUpperCase();
-                const message = String(log.message || '');
-                return `${timestamp} ${level} ${message}`;
-            }).join('\n');
+                const lines = String(log.message || '').split('\n');
+                const firstRow = `${timestamp} ${level} ${lines[0] || ''}`;
+
+                let rowHtml = highlightLogMessage(firstRow, searchTerm);
+                for (let i = 1; i < lines.length; i++) {
+                    rowHtml += `<span class="log-cont-row">${highlightLogMessage(lines[i], searchTerm)}</span>`;
+                }
+                streamHtml += `<div class="log-row">${rowHtml}</div>`;
+            }
 
             container.innerHTML = `
-                <pre class="log-stream">${highlightLogMessage(streamText, currentLogSearchTerm)}</pre>
+                <pre class="log-stream">${streamHtml}</pre>
                 ${renderFetchedLogsSummary()}
             `;
 
+            initLogsRowSelection();
+
             const errorLevelFilter = document.getElementById('errorLevelFilter');
             if (errorLevelFilter) {
-                errorLevelFilter.style.display = 'block';
+                errorLevelFilter.style.display = 'flex';
             }
 
             const searchLogsGroup = document.getElementById('searchLogsGroup');
             if (searchLogsGroup) {
                 searchLogsGroup.style.display = 'flex';
             }
+
+            // Switch the control bar to the symmetric 3-section (thirds) layout.
+            document.getElementById('logsControlBar')?.classList.add('fetched');
 
             updateFilterOptions(getLogLevelSet(getSearchMatchedLogs(allFetchedLogs, currentLogSearchTerm)));
             updateVisibleLogDiagnoseButtons();
@@ -3272,6 +3506,8 @@
                 initExportFetchedBtnScrollBehavior();
                 updateExportFetchedBtnVisibility();
             }
+
+            hideFilterSpinner();
         }
 
         function searchInLogs() {
@@ -3321,22 +3557,76 @@
             URL.revokeObjectURL(url);
         }
 
+        let filterSpinnerEl = null;
+        let filterSpinnerShownAt = 0;
+        const FILTER_SPINNER_MIN_MS = 400; // keep it visible long enough to notice
+        function showFilterSpinner(btn) {
+            hideFilterSpinner(true);
+            if (!btn) return;
+            const rect = btn.getBoundingClientRect();
+            const spinner = document.createElement('span');
+            spinner.className = 'filter-spinner';
+            // Centred horizontally on the button, just above it. Fixed-positioned
+            // on <body> so the modal's overflow:hidden can't clip it.
+            spinner.style.left = (rect.left + rect.width / 2 - 8) + 'px';
+            spinner.style.top = (rect.top - 22) + 'px';
+            document.body.appendChild(spinner);
+            filterSpinnerEl = spinner;
+            filterSpinnerShownAt = Date.now();
+        }
+        function hideFilterSpinner(immediate) {
+            if (!filterSpinnerEl) return;
+            const el = filterSpinnerEl;
+            const remove = () => { el.remove(); if (filterSpinnerEl === el) filterSpinnerEl = null; };
+            const elapsed = Date.now() - filterSpinnerShownAt;
+            if (!immediate && elapsed < FILTER_SPINNER_MIN_MS) {
+                setTimeout(remove, FILTER_SPINNER_MIN_MS - elapsed);
+            } else {
+                remove();
+            }
+        }
+
         function filterLogsByLevel(level) {
             const filterButtons = document.querySelectorAll('.filter-badge, .filter-badge-all');
-            
-            // Update active button states
-            filterButtons.forEach(btn => {
-                const btnLevel = btn.getAttribute('data-level');
-                if ((level === 'all' && btn.classList.contains('filter-badge-all')) ||
-                    (level !== 'all' && btnLevel === level)) {
-                    btn.classList.add('active');
-                } else {
-                    btn.classList.remove('active');
-                }
-            });
 
-            currentLogFilterLevel = level;
-            applyLogViewFilters({ scrollToTop: true });
+            // Spinner above the clicked button so the (heavy, ~seconds) re-filter
+            // of a large log set doesn't look like the app froze. It is removed
+            // when renderLogPage finishes.
+            const clickedBtn = Array.from(filterButtons).find(btn => {
+                const btnLevel = btn.getAttribute('data-level');
+                return (level === 'all' && btn.classList.contains('filter-badge-all')) ||
+                    (level !== 'all' && btnLevel === level);
+            });
+            showFilterSpinner(clickedBtn);
+
+            // Drop the (potentially 10k-row) current DOM immediately so the browser
+            // doesn't have to lay it all out before it can paint the spinner — that
+            // layout was what delayed the spinner by ~1s. With the rows cleared, the
+            // spinner paints right away; the filtered rows are then rebuilt.
+            const logsContainerEl = document.getElementById('logsContainer');
+            if (logsContainerEl) {
+                logsContainerEl.innerHTML = '<div class="no-logs">Loading<span class="ai-thinking-dots"></span></div>';
+            }
+            lastRenderedLogRangeKey = '';
+
+            // Run the heavy re-filter only after the spinner has actually painted.
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    // Update active button states
+                    filterButtons.forEach(btn => {
+                        const btnLevel = btn.getAttribute('data-level');
+                        if ((level === 'all' && btn.classList.contains('filter-badge-all')) ||
+                            (level !== 'all' && btnLevel === level)) {
+                            btn.classList.add('active');
+                        } else {
+                            btn.classList.remove('active');
+                        }
+                    });
+
+                    currentLogFilterLevel = level;
+                    applyLogViewFilters({ scrollToTop: true });
+                });
+            });
         }
 
         function updateFilterOptions(levels) {
@@ -3408,7 +3698,8 @@
                 if (fsLabel) fsLabel.style.display = 'none';
                 const messageNodeFilterLabel = document.getElementById('messageNodeFilterLabel');
                 if (messageNodeFilterLabel) messageNodeFilterLabel.style.display = '';
-                
+                placeUnhealthyFilters(true);
+
                 // Fetch data in background without blocking
                 setTimeout(() => fetchData(), 0);
                 
@@ -3433,6 +3724,7 @@
                 if (fsLabel) fsLabel.style.display = '';
                 const messageNodeFilterLabel = document.getElementById('messageNodeFilterLabel');
                 if (messageNodeFilterLabel) messageNodeFilterLabel.style.display = 'none';
+                placeUnhealthyFilters(false);
                 // Clear services container to show it's loading
                 document.getElementById('servicesContainer').innerHTML = '<div class="loading" style="display:block; color:#555;">Loading Services<span class="ai-thinking-dots"></span></div>';
                 
@@ -3697,6 +3989,8 @@
         if (_fsLabelInit) _fsLabelInit.style.display = 'none';
         const _messageNodeFilterLabelInit = document.getElementById('messageNodeFilterLabel');
         if (_messageNodeFilterLabelInit) _messageNodeFilterLabelInit.style.display = '';
+        // Initial view is Home — move Search + Filter-by-Node into the dropdown.
+        placeUnhealthyFilters(true);
         
         updateFavicon();
 
@@ -3714,3 +4008,4 @@
     </script>
 </body>
 </html>
+

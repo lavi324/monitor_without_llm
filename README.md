@@ -25,6 +25,10 @@ D) Execute ./setup-secrets.sh and provide all the required details.
 
 Step 3: Deploy the Monitor app:
 
+
+makeeeeeeeeeeeee sure you have at leat 1 node that is a sworm manager
+
+
 A) Navigate to the directory that contains the deploy.sh script (e.g. /home/ta9/app_version) and execute ./deploy.sh -f monitor
 
 B) Wait for services to start.

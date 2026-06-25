@@ -22,6 +22,7 @@ const CONNECTION_TIMEOUT = 5 * 60 * 1000; // 5 minutes - reconnect after this
 const nodeConfigs = [];
 const nodeLocks = new Map(); // Serialize per-node operations to avoid channel exhaustion
 
+
 // Connection health tracking
 const connectionHealth = new Map();
 const MAX_FAILURES = 3;
@@ -307,9 +308,9 @@ function createSSHDockerode(sshConn, config) {
     
     isProcessingQueue = true;
     while (commandQueue.length > 0) {
-      const { cmd, resolve, reject } = commandQueue.shift();
+      const { cmd, resolve, reject, timeoutMs } = commandQueue.shift();
       try {
-        const result = await executeSSHCommand(cmd);
+        const result = await executeSSHCommand(cmd, timeoutMs);
         resolve(result);
       } catch (err) {
         reject(err);
@@ -319,16 +320,17 @@ function createSSHDockerode(sshConn, config) {
     }
     isProcessingQueue = false;
   };
-  
-  const execSSHCommand = (cmd) => {
+
+  const DEFAULT_SSH_CMD_TIMEOUT = 10000;
+  const execSSHCommand = (cmd, timeoutMs = DEFAULT_SSH_CMD_TIMEOUT) => {
     return new Promise((resolve, reject) => {
       console.log(`[SSH:${config.name}] Queueing command: ${cmd.substring(0, 100)}...`);
-      commandQueue.push({ cmd, resolve, reject });
+      commandQueue.push({ cmd, resolve, reject, timeoutMs });
       processQueue();
     });
   };
-  
-  const executeSSHCommand = (cmd) => {
+
+  const executeSSHCommand = (cmd, timeoutMs = DEFAULT_SSH_CMD_TIMEOUT) => {
     return new Promise((resolve, reject) => {
       console.log(`[SSH:${config.name}] Executing command: ${cmd.substring(0, 100)}...`);
       // Check if connection is still alive
@@ -336,17 +338,17 @@ function createSSHDockerode(sshConn, config) {
         console.error(`[SSH:${config.name}] Connection is closed!`);
         return reject(new Error('SSH connection is closed'));
       }
-      
+
       let isResolved = false;
-      
-      // Add 10-second timeout per SSH command
+
+      // Per-command timeout (configurable; large log fetches get a longer budget)
       const cmdTimeout = setTimeout(() => {
         if (!isResolved) {
-          console.error(`[SSH:${config.name}] Command timeout after 10s`);
+          console.error(`[SSH:${config.name}] Command timeout after ${timeoutMs}ms`);
           isResolved = true;
           reject(new Error(`SSH command timeout: ${cmd.substring(0, 50)}`));
         }
-      }, 10000);
+      }, timeoutMs);
       
       console.log(`[SSH:${config.name}] Calling sshConn.exec...`);
       sshConn.exec(cmd, (err, stream) => {
@@ -454,9 +456,91 @@ function createSSHDockerode(sshConn, config) {
     
     return now;
   };
-  
+
+  // ----- Swarm-role awareness + manager delegation --------------------------
+  // Swarm query commands (service ls/inspect/ps/logs, node ls) only work on
+  // managers. When the selected node is a worker, we don't reconstruct anything
+  // locally — we SSH to a MANAGER of the same swarm and run the real commands
+  // there. A manager has the full cluster view, so it can list, inspect, log and
+  // control the worker's tasks too. Only host-level usage stays on the worker.
+  let managerStatusCache = null;
+  const isManagerNode = async () => {
+    if (managerStatusCache !== null) return managerStatusCache;
+    try {
+      const out = (await execSSHCommand("docker info --format '{{.Swarm.ControlAvailable}}'")).trim();
+      managerStatusCache = out === 'true';
+    } catch (err) {
+      // Assume manager on error so healthy manager nodes are never disturbed.
+      managerStatusCache = true;
+    }
+    return managerStatusCache;
+  };
+
+  let clusterIdCache = null;
+  const getClusterId = async () => {
+    if (clusterIdCache !== null) return clusterIdCache;
+    try {
+      clusterIdCache = (await execSSHCommand("docker info --format '{{.Swarm.Cluster.ID}}'")).trim();
+    } catch (err) {
+      clusterIdCache = '';
+    }
+    return clusterIdCache;
+  };
+
+  const isConnAlive = (d) => d && d.__sshConn && d.__sshConn._sock && !d.__sshConn._sock.destroyed;
+
+  // Resolve a docker connection to a swarm MANAGER for this node's swarm.
+  // Returns this wrapper itself when this node is already a manager.
+  let managerDelegate = null;
+  const getManagerDelegate = async () => {
+    if (await isManagerNode()) return dockerApi;
+    if (isConnAlive(managerDelegate)) return managerDelegate;
+    managerDelegate = null;
+
+    const myCluster = await getClusterId();
+
+    // 1) Prefer an already-configured SSH node that is a manager of the SAME swarm.
+    for (const n of nodeConfigs) {
+      if (n.type !== 'ssh' || n.name === config.name) continue;
+      try {
+        const cand = await getDockerConnection(n.name);
+        if (!(await cand.isManager())) continue;
+        const candCluster = (await cand.execHost("docker info --format '{{.Swarm.Cluster.ID}}'")).trim();
+        if (myCluster && candCluster && candCluster !== myCluster) continue; // different swarm
+        managerDelegate = cand;
+        console.log(`[delegate] worker ${config.name} -> configured manager ${n.name}`);
+        return managerDelegate;
+      } catch (err) { /* try next candidate */ }
+    }
+
+    // 2) Fall back to a manager IP this node advertises, reusing its SSH creds.
+    try {
+      const raw = (await execSSHCommand("docker info --format '{{json .Swarm.RemoteManagers}}'")).trim();
+      const managers = JSON.parse(raw || 'null') || [];
+      for (const m of managers) {
+        const ip = String(m.Addr || '').split(':')[0];
+        if (!ip) continue;
+        try {
+          const cand = await createSSHDockerConnection({ ...config, host: ip, name: `${config.name}::mgr(${ip})` });
+          if (await cand.isManager()) {
+            managerDelegate = cand;
+            console.log(`[delegate] worker ${config.name} -> manager ${ip} (via RemoteManagers)`);
+            return managerDelegate;
+          }
+          try { cand.__sshConn.end(); } catch (e) { /* ignore */ }
+        } catch (err) { /* try next */ }
+      }
+    } catch (err) { /* ignore */ }
+
+    throw new Error(`No reachable swarm manager found for worker node ${config.name}`);
+  };
+
   const dockerApi = {
     async listServices() {
+      // Worker: delegate to a manager (full swarm view).
+      const swarm = await getManagerDelegate();
+      if (swarm !== dockerApi) return swarm.listServices();
+
       const output = await execSSHCommand('docker service ls --format "{{json .}}"');
       const lines = output.trim().split('\n').filter(l => l);
       return lines.map(line => {
@@ -476,14 +560,19 @@ function createSSHDockerode(sshConn, config) {
         };
       });
     },
-    
+
     async listTasks(options) {
       const serviceId = options?.filters?.service?.[0];
       const skipContainerLookup = options?.skipContainerLookup === true;
-      const cmd = serviceId 
+
+      // Worker: delegate to a manager (sees tasks across all nodes).
+      const swarm = await getManagerDelegate();
+      if (swarm !== dockerApi) return swarm.listTasks(options);
+
+      const cmd = serviceId
         ? `docker service ps ${serviceId} --format "{{json .}}" --no-trunc`
         : 'docker ps --format "{{json .}}"';
-      
+
       const output = await execSSHCommand(cmd);
       const lines = output.trim().split('\n').filter(l => l);
       
@@ -552,6 +641,10 @@ function createSSHDockerode(sshConn, config) {
     },
     
     async listNodes() {
+      // Worker: delegate to a manager (full node list).
+      const swarm = await getManagerDelegate();
+      if (swarm !== dockerApi) return swarm.listNodes();
+
       const output = await execSSHCommand('docker node ls --format "{{json .}}"');
       const lines = output.trim().split('\n').filter(l => l);
       return lines.map(line => {
@@ -560,17 +653,21 @@ function createSSHDockerode(sshConn, config) {
           ID: data.ID,
           Description: { Hostname: data.Hostname },
           Status: { State: data.Status },
-          Spec: { 
+          Spec: {
             Availability: data.Availability,
             Role: data.ManagerStatus ? 'manager' : 'worker'
           }
         };
       });
     },
-    
+
     getService(serviceId) {
       return {
         async inspect() {
+          // Worker: delegate to a manager.
+          const swarm = await getManagerDelegate();
+          if (swarm !== dockerApi) return swarm.getService(serviceId).inspect();
+
           const output = await execSSHCommand(`docker service inspect ${serviceId}`);
           const data = JSON.parse(output);
           return data[0];
@@ -613,9 +710,21 @@ function createSSHDockerode(sshConn, config) {
       };
     },
     // Execute a host-level command on the SSH node
-    async execHost(cmd) {
-      const out = await execSSHCommand(cmd);
+    async execHost(cmd, timeoutMs) {
+      const out = await execSSHCommand(cmd, timeoutMs);
       return out;
+    },
+
+    // Whether this node is a swarm manager (cached for the connection lifetime).
+    async isManager() {
+      return isManagerNode();
+    },
+
+    // A docker connection to a swarm MANAGER for this node's swarm (self if this
+    // node is already a manager; otherwise a configured/discovered manager). All
+    // swarm-only operations should run against this so worker nodes work too.
+    async getSwarmDocker() {
+      return getManagerDelegate();
     }
   };
 
@@ -1335,6 +1444,7 @@ app.get('/api/services-usage', async (req, res) => {
   }
 });
 
+
 // Get logs for a specific service on a specific node
 app.get('/api/logs/:serviceId', async (req, res) => {
   try {
@@ -1357,14 +1467,32 @@ app.get('/api/logs/:serviceId', async (req, res) => {
     }
     
     console.log(`[/api/logs/${serviceId}] Getting docker connection for node: ${nodeName}`);
-    const docker = await runWithNodeLock(nodeName, async () => getDockerConnection(nodeName));
-    console.log(`[/api/logs/${serviceId}] Docker connection obtained, getting service info...`);
-    
+    let docker = await runWithNodeLock(nodeName, async () => getDockerConnection(nodeName));
+    console.log(`[/api/logs/${serviceId}] Docker connection obtained...`);
+
+    // Get node config to check if it's SSH or local
+    const config = nodeConfigs.find(n => n.name === nodeName);
+    if (!config) {
+      return res.status(400).json({ error: `Node ${nodeName} not found in configuration` });
+    }
+
+    // Logs are a swarm operation. If the selected node is a worker, delegate to a
+    // manager of its swarm — a manager can stream the logs of the worker's tasks
+    // cluster-wide. Managers resolve to themselves, so their flow is unchanged.
+    if (config.type === 'ssh') {
+      docker = await docker.getSwarmDocker();
+    }
+
     const serviceInfo = await docker.getService(serviceId).inspect();
     console.log(`[/api/logs/${serviceId}] Service name: ${serviceInfo.Spec.Name}, getting tasks...`);
-    
+
+    // skipContainerLookup: the SSH primary path uses `docker service logs <id>`
+    // and never needs per-task container IDs. Looking them up costs 1-2 extra
+    // serialized SSH round-trips per task, which dominates latency on services
+    // with many historical tasks. The rare fallback path resolves IDs lazily.
     const tasks = await docker.listTasks({
-      filters: { service: [serviceId] }
+      filters: { service: [serviceId] },
+      skipContainerLookup: true
     });
     console.log(`[/api/logs/${serviceId}] Tasks found: ${tasks.length}`);
 
@@ -1372,131 +1500,221 @@ app.get('/api/logs/:serviceId', async (req, res) => {
       console.log(`[/api/logs/${serviceId}] No tasks found, returning empty array`);
       return res.json([]);
     }
-    
+
       console.log(`[/api/logs/${serviceId}] Preparing latest log fetch, count: ${requestedCount}`);
-      
-      // Get node config to check if it's SSH or local
-      const config = nodeConfigs.find(n => n.name === nodeName);
-      if (!config) {
-        return res.status(400).json({ error: `Node ${nodeName} not found in configuration` });
-      }
+
+      // Keep fetch bounded for large requests so 10k retrieval stays responsive.
+      const logFetchOverhead = Math.min(2000, Math.max(300, Math.floor(requestedCount * 0.1)));
+      const maxRawLines = requestedCount + logFetchOverhead;
+
+      const LOG_LEVEL_PATTERN = /\b(INFO|DEBUG|WARN|WARNING|ERROR|TRACE|FATAL|INF|ERR|WRN|DBG)\b/i;
+      const STACKTRACE_CONTINUATION_PATTERN = /^(?:at\s+\S|\.\.\.\s+\d+\s+more$|Caused by:|Suppressed:|Wrapped by:)/;
+      // NOTE: must stay linear-time. A nested quantifier like
+      // /^(?:[a-zA-Z_$][\w$.]+)*(?:Exception|Error)(?::|$)/ causes catastrophic
+      // backtracking (ReDoS) on long word-ish lines and pegs the event loop at
+      // 100% CPU, which is what made large log fetches hang. The flat char class
+      // below matches the same class-name shapes (e.g. java.lang.NullPointerException:)
+      // without nesting.
+      const EXCEPTION_LINE_PATTERN = /^[\w$.]*(?:Exception|Error)(?::|$)/;
+
+      const normalizeLogLine = (line) => String(line || '')
+        .replace(/\r/g, '')
+        .replace(/\u001b\[[0-9;]*m/g, '')
+        .replace(/^[\u0000-\u001f]+/, '');
+
+      const decodeDockerLogPayload = (value) => {
+        if (!Buffer.isBuffer(value)) return String(value || '');
+
+        // Docker non-TTY logs may use an 8-byte multiplexed frame header.
+        // Decode framed payload safely; if format doesn't match, fall back to plain text.
+        const chunks = [];
+        let offset = 0;
+        let framed = false;
+
+        while (offset + 8 <= value.length) {
+          const streamType = value[offset];
+          const payloadLen = value.readUInt32BE(offset + 4);
+          const frameEnd = offset + 8 + payloadLen;
+
+          if ((streamType !== 1 && streamType !== 2) || frameEnd > value.length) {
+            framed = false;
+            break;
+          }
+
+          framed = true;
+          chunks.push(value.slice(offset + 8, frameEnd));
+          offset = frameEnd;
+        }
+
+        if (framed && offset === value.length) {
+          return Buffer.concat(chunks).toString('utf8');
+        }
+
+        return value.toString('utf8');
+      };
+
+      const extractSessionId = (value) => {
+        const sessionMatch = String(value || '').match(/\[([a-zA-Z0-9_-]+(?:::|:)\d+)\]/);
+        let sessionId = sessionMatch ? sessionMatch[1] : null;
+        if (sessionId && !sessionId.includes('::') && sessionId.length <= 15) {
+          sessionId = null;
+        }
+        return sessionId;
+      };
+
+      const cleanLogMessage = (value) => {
+        let cleanedMessage = String(value || '');
+
+        cleanedMessage = cleanedMessage.replace(/^.*?\b(INFO|DEBUG|WARN|WARNING|ERROR|TRACE|FATAL|INF|ERR|WRN|DBG)\b\s*/, '');
+        cleanedMessage = cleanedMessage.replace(/^\d{4}-\d{2}-\d{2}T[\d:.+-]*Z?\s*/, '');
+
+        let prevMessage = '';
+        while (cleanedMessage !== prevMessage && /^\[[^\]]+\]\s*/.test(cleanedMessage)) {
+          prevMessage = cleanedMessage;
+          cleanedMessage = cleanedMessage.replace(/^\[[^\]]+\]\s*/, '');
+        }
+
+        const dashIndex = cleanedMessage.indexOf(' - ');
+        if (dashIndex > 0) {
+          const afterDash = cleanedMessage.substring(dashIndex + 3);
+          if (/^(OK|finished|completed|SUCCESS|FAILED)/i.test(afterDash)) {
+            cleanedMessage = cleanedMessage.substring(0, dashIndex);
+          }
+        }
+
+        return cleanedMessage.trimEnd();
+      };
+
+      const detectLogLevel = (value) => {
+        const messageLower = String(value || '').toLowerCase();
+        if (messageLower.includes('error') || messageLower.includes('fatal') || messageLower.includes('exception')) return 'error';
+        if (messageLower.includes('warn')) return 'warning';
+        if (messageLower.includes('debug')) return 'debug';
+        return 'info';
+      };
+
+      const buildParsedEntry = ({ timestamp, rawMessage, fallbackFlowId }) => {
+        const message = cleanLogMessage(rawMessage);
+        const explicitLevel = LOG_LEVEL_PATTERN.test(String(rawMessage || ''));
+        const continuationHint = STACKTRACE_CONTINUATION_PATTERN.test(message)
+          || /^\s+at\s+\S/.test(String(rawMessage || ''))
+          || EXCEPTION_LINE_PATTERN.test(message);
+
+        return {
+          timestamp,
+          message,
+          level: detectLogLevel(rawMessage),
+          flowId: extractSessionId(rawMessage) || fallbackFlowId,
+          explicitLevel,
+          continuationHint
+        };
+      };
+
+      const coalesceMultilineEntries = (entries) => {
+        const grouped = [];
+        let current = null;
+
+        for (const entry of entries) {
+          if (!entry || !entry.message) continue;
+
+          const shouldAppend = Boolean(
+            current
+            && (
+              entry.continuationHint
+              || (!entry.explicitLevel && current.level === 'error')
+            )
+          );
+
+          if (shouldAppend) {
+            current.message = `${current.message}\n${entry.message}`;
+            continue;
+          }
+
+          if (current) {
+            grouped.push(current);
+          }
+
+          current = { ...entry };
+        }
+
+        if (current) {
+          grouped.push(current);
+        }
+
+        return grouped.map(({ explicitLevel, continuationHint, ...entry }) => entry);
+      };
+
+      const parseServiceLogLines = (lines, idPrefix) => {
+        const serviceRegex = /(\d{4}-\d{2}-\d{2}T[\d:.]+Z?)\s+[^|]+\|\s*(.*)$/;
+        return lines.map((line, idx) => {
+          const normalizedLine = normalizeLogLine(line);
+          const match = normalizedLine.match(serviceRegex);
+          if (match) {
+            const [, ts, rawMessage] = match;
+            return buildParsedEntry({
+              timestamp: ts.endsWith('Z') ? ts : `${ts}Z`,
+              rawMessage,
+              fallbackFlowId: `${idPrefix}-${idx}`
+            });
+          }
+
+          return buildParsedEntry({
+            timestamp: new Date().toISOString(),
+            rawMessage: normalizedLine,
+            fallbackFlowId: `${idPrefix}-raw-${idx}`
+          });
+        }).filter(Boolean);
+      };
 
       // Parser helper
-      const parseLogs = (raw, namePrefix) => {
-        const normalizeLogLine = (line) => String(line || '')
-          .replace(/\r/g, '')
-          .replace(/\u001b\[[0-9;]*m/g, '')
-          .replace(/^[\u0000-\u001f]+/, '');
-
-        const decodeDockerLogPayload = (value) => {
-          if (!Buffer.isBuffer(value)) return String(value || '');
-
-          // Docker non-TTY logs may use an 8-byte multiplexed frame header.
-          // Decode framed payload safely; if format doesn't match, fall back to plain text.
-          const chunks = [];
-          let offset = 0;
-          let framed = false;
-
-          while (offset + 8 <= value.length) {
-            const streamType = value[offset];
-            const payloadLen = value.readUInt32BE(offset + 4);
-            const frameEnd = offset + 8 + payloadLen;
-
-            if ((streamType !== 1 && streamType !== 2) || frameEnd > value.length) {
-              framed = false;
-              break;
-            }
-
-            framed = true;
-            chunks.push(value.slice(offset + 8, frameEnd));
-            offset = frameEnd;
-          }
-
-          if (framed && offset === value.length) {
-            return Buffer.concat(chunks).toString('utf8');
-          }
-
-          return value.toString('utf8');
-        };
-
+      const parseLogs = (raw, namePrefix, maxLines = maxRawLines) => {
         const text = decodeDockerLogPayload(raw);
-        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        const allLines = text.split(/\r?\n/).filter(l => l.trim());
+        const lines = allLines.length > maxLines ? allLines.slice(-maxLines) : allLines;
         const regexTs = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)?\s*(.+)$/;
-        return lines.map((line, index) => {
+        const parsedLines = lines.map((line, index) => {
           const normalizedLine = normalizeLogLine(line);
           const m = normalizedLine.match(regexTs);
           let iso = new Date().toISOString();
           let msg = m ? m[2] : normalizedLine;
-          if (m && m[1]) { iso = m[1].endsWith('Z') ? m[1] : m[1] + 'Z'; }
-          
-          // Extract session ID from [sessionId::number] or [longSessionId:number] format
-          // Must have :: followed by digit, OR be a long string (15+ chars) with : and digit
-          // This excludes simple labels like [SCHEDULE], [GIT], [INFO], etc.
-          const sessionMatch = msg.match(/\[([a-zA-Z0-9_-]+(?:::|:)\d+)\]/);
-          let sessionId = sessionMatch ? sessionMatch[1] : null;
-          // Only keep if it has :: OR is longer than 15 chars (real session IDs are long)
-          if (sessionId && !sessionId.includes('::') && sessionId.length <= 15) {
-            sessionId = null;
+          if (m && m[1]) {
+            iso = m[1].endsWith('Z') ? m[1] : m[1] + 'Z';
           }
-          
-          // Clean the message: remove everything up to and including log level
-          let cleanedMessage = msg;
-          
-          // Remove everything UP TO and INCLUDING the log level
-          // This handles: timestamp, [thread], log level in one pass
-          cleanedMessage = cleanedMessage.replace(/^.*?\b(INFO|DEBUG|WARN|WARNING|ERROR|TRACE|FATAL|INF|ERR|WRN|DBG)\b\s*/, '');
-          
-          // Remove any remaining timestamp at start
-          cleanedMessage = cleanedMessage.replace(/^\d{4}-\d{2}-\d{2}T[\d:.]+\s*/, '');
-          
-          // Remove thread/category brackets at start (like [GIT], [SCHEDULE], [default task-1])
-          // Keep removing until no more bracketed prefixes exist
-          let prevMessage = '';
-          while (cleanedMessage !== prevMessage && cleanedMessage.match(/^\[[^\]]+\]\s*/)) {
-            prevMessage = cleanedMessage;
-            cleanedMessage = cleanedMessage.replace(/^\[[^\]]+\]\s*/, '');
-          }
-          
-          // Remove trailing info after " - " (like "- OK, Elapsed time: 3 ms")
-          const dashIndex = cleanedMessage.indexOf(' - ');
-          if (dashIndex > 0) {
-            const afterDash = cleanedMessage.substring(dashIndex + 3);
-            if (afterDash.match(/^(OK|finished|completed|SUCCESS|FAILED)/i)) {
-              cleanedMessage = cleanedMessage.substring(0, dashIndex);
-            }
-          }
-          
-          cleanedMessage = cleanedMessage.trim();
-          
-          // Determine level from original message before cleaning
-          let level = 'info';
-          const msgLower = msg.toLowerCase();
-          if (msgLower.includes('error') || msgLower.includes('fatal') || msgLower.includes('exception')) level = 'error';
-          else if (msgLower.includes('warn')) level = 'warning';
-          else if (msgLower.includes('debug')) level = 'debug';
-          
-          return { timestamp: iso, message: cleanedMessage, level, flowId: sessionId || `${namePrefix}-${index}` };
+
+          return buildParsedEntry({
+            timestamp: iso,
+            rawMessage: msg,
+            fallbackFlowId: `${namePrefix}-${index}`
+          });
         });
+
+        return coalesceMultilineEntries(parsedLines);
       };
 
       console.log(`[/api/logs/${serviceId}] Fetching latest logs, node type: ${config.type}`);
-        
-        // For SSH nodes, always use 'docker service logs' which works across all swarm nodes
+
+        // For SSH manager nodes, always use 'docker service logs' which works across all swarm nodes
         // and includes logs from all tasks (running, failed, shutdown)
         if (config.type === 'ssh') {
           console.log(`[/api/logs/${serviceId}] SSH node - using docker service logs for service ID: ${serviceId}`);
           try {
-            const cmd = `docker service logs ${serviceId} --timestamps --tail ${requestedCount * 2} 2>&1`;
+            const cmd = `docker service logs ${serviceId} --timestamps --tail ${maxRawLines} 2>&1`;
             console.log(`[/api/logs/${serviceId}] Executing: ${cmd}`);
             let raw = '';
             try {
-              raw = await docker.execHost(cmd);
+              // Large fetches (up to 10k lines) need more than the default 10s
+              // per-command budget for docker to gather + stream the output.
+              const logFetchTimeout = Math.min(60000, 15000 + requestedCount * 3);
+              raw = await docker.execHost(cmd, logFetchTimeout);
             } catch (logErr) {
               console.log(`[/api/logs/${serviceId}] Primary SSH service log fetch failed, trying fallback: ${logErr.message}`);
             }
             console.log(`[/api/logs/${serviceId}] Raw output length: ${raw.length} bytes`);
 
             let lines = raw.trim().split(/\r?\n/).filter(l => l.trim());
+            if (lines.length > maxRawLines) {
+              lines = lines.slice(-maxRawLines);
+            }
 
             if (lines.length === 0) {
               console.log(`[/api/logs/${serviceId}] SSH service logs empty, falling back to recent task logs`);
@@ -1526,7 +1744,7 @@ app.get('/api/logs/:serviceId', async (req, res) => {
 
                 if (!String(taskRaw || '').trim() && taskShortId) {
                   try {
-                    taskRaw = await docker.execHost(`docker service logs ${serviceId} --timestamps --tail ${Math.max(requestedCount * 20, 200)} 2>&1 | grep -F '${taskShortId}' || true`);
+                    taskRaw = await docker.execHost(`docker service logs ${serviceId} --timestamps --tail ${Math.max(maxRawLines, 300)} 2>&1 | grep -F '${taskShortId}' || true`);
                   } catch (taskErr) {
                     console.log(`[/api/logs/${serviceId}] SSH task-stream fallback failed for task ${taskShortId}: ${taskErr.message}`);
                   }
@@ -1544,68 +1762,7 @@ app.get('/api/logs/:serviceId', async (req, res) => {
 
             console.log(`[/api/logs/${serviceId}] Split into ${lines.length} lines`);
             
-            const parsed = lines.map((line, idx) => {
-              const normalizedLine = String(line || '')
-                .replace(/\r/g, '')
-                .replace(/\u001b\[[0-9;]*m/g, '')
-                .replace(/^[\u0000-\u001f]+/, '');
-
-              // Parse service logs format: timestamp serviceName.taskNum.taskId@nodeId | message
-              // Docker service logs format has timestamp BEFORE the service identifier
-              const match = normalizedLine.match(/(\d{4}-\d{2}-\d{2}T[\d:.]+Z?)\s+[^|]+\|\s*(.*)$/);
-              if (match) {
-                const [, ts, rawMessage] = match;
-                const timestamp = ts.endsWith('Z') ? ts : ts + 'Z';
-                
-                // Extract session ID from [sessionId::number] or [longSessionId:number] format
-                // Must have :: followed by digit, OR be a long string (15+ chars) with : and digit
-                const sessionMatch = rawMessage.match(/\[([a-zA-Z0-9_-]+(?:::|:)\d+)\]/);
-                let sessionId = sessionMatch ? sessionMatch[1] : null;
-                // Only keep if it has :: OR is longer than 15 chars (real session IDs are long)
-                if (sessionId && !sessionId.includes('::') && sessionId.length <= 15) {
-                  sessionId = null;
-                }
-                
-                // Clean the message: remove everything up to and including log level
-                let message = rawMessage;
-                
-                // Remove everything UP TO and INCLUDING the log level (if present)
-                message = message.replace(/^.*?\b(INFO|DEBUG|WARN|WARNING|ERROR|TRACE|FATAL|INF|ERR|WRN|DBG)\b\s*/, '');
-                
-                // Remove any remaining timestamp at start
-                message = message.replace(/^\d{4}-\d{2}-\d{2}T[\d:.]+\s*/, '');
-                
-                // Remove thread/category brackets at start (like [GIT], [SCHEDULE], [default task-1])
-                // Keep removing until no more bracketed prefixes exist
-                let prevMessage = '';
-                while (message !== prevMessage && message.match(/^\[[^\]]+\]\s*/)) {
-                  prevMessage = message;
-                  message = message.replace(/^\[[^\]]+\]\s*/, '');
-                }
-                
-                // Remove trailing info after " - "
-                const dashIndex = message.indexOf(' - ');
-                if (dashIndex > 0) {
-                  const afterDash = message.substring(dashIndex + 3);
-                  if (afterDash.match(/^(OK|finished|completed|SUCCESS|FAILED)/i)) {
-                    message = message.substring(0, dashIndex);
-                  }
-                }
-                
-                message = message.trim();
-                
-                // Determine level from raw message before cleaning
-                let level = 'info';
-                const rawLower = rawMessage.toLowerCase();
-                if (rawLower.includes('error') || rawLower.includes('fatal') || rawLower.includes('exception')) level = 'error';
-                else if (rawLower.includes('warn')) level = 'warning';
-                else if (rawLower.includes('debug')) level = 'debug';
-                
-                return { timestamp, message, level, flowId: sessionId || `task-${idx}` };
-              }
-              // If format doesn't match, still return the line
-              return { timestamp: new Date().toISOString(), message: normalizedLine, level: 'info', flowId: `raw-${idx}` };
-            }).filter(Boolean);
+            const parsed = coalesceMultilineEntries(parseServiceLogLines(lines, 'task'));
 
             if (parsed.length === 0) {
               const synthesized = tasks
@@ -1717,10 +1874,12 @@ app.post('/api/service/:serviceId/scale', async (req, res) => {
     }
     
     await runWithNodeLock(nodeName, async () => {
-      const docker = await getDockerConnection(nodeName);
-      
+      let docker = await getDockerConnection(nodeName);
+
       if (config.type === 'ssh') {
-        // Use docker service scale command for SSH nodes
+        // Scaling is a swarm operation — run it on a manager of this swarm.
+        // For a worker node this delegates to its manager; managers use themselves.
+        docker = await docker.getSwarmDocker();
         await docker.execHost(`docker service scale ${serviceId}=${replicas}`);
       } else {
         // Use dockerode API for local node
@@ -1772,10 +1931,12 @@ app.post('/api/service/:serviceId/restart', async (req, res) => {
     }
     
     await runWithNodeLock(nodeName, async () => {
-      const docker = await getDockerConnection(nodeName);
-      
+      let docker = await getDockerConnection(nodeName);
+
       if (config.type === 'ssh') {
-        // Use docker service update --force to restart the service
+        // Restart is a swarm operation — run it on a manager of this swarm.
+        // For a worker node this delegates to its manager; managers use themselves.
+        docker = await docker.getSwarmDocker();
         await docker.execHost(`docker service update --force ${serviceId}`);
       } else {
         // Use dockerode API for local node
@@ -1823,14 +1984,10 @@ app.get('/api/service/:serviceId/info', async (req, res) => {
     const serviceInfo = await runWithNodeLock(nodeName, async () => {
       const docker = await getDockerConnection(nodeName);
       
-      if (config.type === 'ssh') {
-        const output = await docker.execHost(`docker service inspect ${serviceId}`);
-        const data = JSON.parse(output);
-        return data[0];
-      } else {
-        const service = docker.getService(serviceId);
-        return await service.inspect();
-      }
+      // getService().inspect() is swarm-role aware for SSH nodes (manager uses
+      // `docker service inspect`; worker synthesizes from local containers).
+      const service = docker.getService(serviceId);
+      return await service.inspect();
     });
     
     res.json({

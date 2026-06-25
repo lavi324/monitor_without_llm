@@ -1,6 +1,6 @@
 services:
   backend:
-    image: monitor-backend:1.0.1
+    image: monitor-backend:1.0.9
     ports:
       - "3001:3001"
     environment:
@@ -25,7 +25,7 @@ services:
     ports:
       - "8081:80"
     volumes:
-      - ./app/frontend/index.html:/usr/share/nginx/html/index.html:ro
+      - ./app/frontend:/usr/share/nginx/html:ro
       - ./app/frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     deploy:
       replicas: ${FRONTEND_REPLICAS:-1}
