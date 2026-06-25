@@ -14,35 +14,14 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            /* Layered blue background: a deep→bright blue gradient with fine
-               diagonal pinstripes on top for texture (not a flat, boring fill). */
+            /* Black ↔ gray diagonal blend with fine thin white pinstripes on top. */
             background:
-                repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.05) 0, rgba(255, 255, 255, 0.05) 1px, transparent 1px, transparent 22px),
-                linear-gradient(135deg, #0b2f7a 0%, #1d4ed8 45%, #2563eb 70%, #0ea5e9 100%);
+                repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.07) 0, rgba(255, 255, 255, 0.07) 1px, transparent 1px, transparent 24px),
+                linear-gradient(135deg, #050507 0%, #45454f 40%, #161619 68%, #50505c 100%);
             background-attachment: fixed;
             min-height: 100vh;
             padding: 20px;
             position: relative;
-        }
-
-        /* Soft, slowly-drifting colour glows for depth and a bit of life. Fixed and
-           behind the content so it never interferes with scrolling or clicks. */
-        body::before {
-            content: '';
-            position: fixed;
-            inset: 0;
-            z-index: -1;
-            pointer-events: none;
-            background:
-                radial-gradient(circle at 18% 22%, rgba(56, 189, 248, 0.30), transparent 38%),
-                radial-gradient(circle at 82% 12%, rgba(129, 140, 248, 0.28), transparent 42%),
-                radial-gradient(circle at 65% 88%, rgba(14, 165, 233, 0.22), transparent 45%);
-            animation: bgGlowDrift 20s ease-in-out infinite alternate;
-        }
-
-        @keyframes bgGlowDrift {
-            0%   { transform: translate3d(0, 0, 0) scale(1); opacity: 0.85; }
-            100% { transform: translate3d(0, -2%, 0) scale(1.08); opacity: 1; }
         }
 
         .container {
@@ -57,6 +36,23 @@
             margin-bottom: 30px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             position: relative;
+        }
+
+        /* Header filter that narrows the board services by keyword. */
+        #boardSearch {
+            width: 460px;
+            max-width: 90%;
+            padding: 10px 16px;
+            border: 1px solid #cfd6ea;
+            border-radius: 10px;
+            font-size: 14px;
+            outline: none;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        #boardSearch:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
         }
 
         /* Logo pinned to the top-left corner of the header card. */
@@ -88,10 +84,9 @@
         }
 
         .header h1 {
-            background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: #111111;
+            -webkit-text-fill-color: #111111;
+            background: none;
             font-size: 2.5rem;
             font-weight: 700;
             text-align: center;
@@ -224,6 +219,49 @@
             gap: 10px;
         }
 
+        /* Static status-guide card that replaced the unhealthy-services list. */
+        .legend-cards {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            margin: 16px 0 6px;
+        }
+        .legend-card {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px 16px;
+            border-radius: 10px;
+            border: 1px solid #eceff5;
+        }
+        .legend-card.healthy { background: #f1f8f4; border-left: 4px solid #4caf50; }
+        .legend-card.unhealthy { background: #fff5f5; border-left: 4px solid #f44336; }
+        .legend-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            margin-top: 3px;
+        }
+        .legend-dot.up { background: #22c55e; box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.22); }
+        .legend-dot.down { background: #ef4444; box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.22); }
+        .legend-text { display: flex; flex-direction: column; gap: 4px; }
+        .legend-text strong { color: #222; font-size: 14px; }
+        .legend-text span { color: #555; font-size: 13px; line-height: 1.5; }
+        .legend-note {
+            margin: 14px 0 0;
+            padding: 12px 14px;
+            background: #f7f9ff;
+            border: 1px solid #e6ebf7;
+            border-radius: 10px;
+            color: #555;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        @media (max-width: 768px) {
+            .legend-cards { grid-template-columns: 1fr; }
+        }
+
         .messages-section .status-healthy {
             color: #4caf50;
         }
@@ -310,6 +348,148 @@
             flex: 0 0 auto;
             width: 260px !important;
             min-width: 0;
+        }
+
+        /* ===== Nodes board: one column per node, up to 10 columns ===== */
+        /* Break out of the 1400px container so up to 10 columns get real width,
+           and fall back to horizontal scroll if they can't all fit (small screens
+           / many nodes). Columns are always equal width, so the board stays
+           symmetric. */
+        .nodes-board {
+            display: grid;
+            gap: 14px;
+            align-items: start;
+            width: 95vw;
+            max-width: 1850px;
+            position: relative;
+            left: 50%;
+            transform: translateX(-50%);
+            overflow-x: auto;
+            padding-bottom: 6px;
+        }
+
+        .node-column {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .node-head {
+            background: linear-gradient(135deg, #4b5563 0%, #374151 100%);  /* gray card */
+            color: #ffffff;
+            padding: 10px 12px;
+            border-radius: 10px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        /* Left block: compact host CPU / RAM / disk usage, stacked. */
+        .node-head-usage {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            font-size: 9.5px;
+            line-height: 1.3;
+            font-weight: 600;
+            color: #e5e7eb;
+            text-align: left;
+            flex: 0 0 56px;
+            white-space: nowrap;
+        }
+        .node-head-usage .nh-stat b {
+            color: #aab4c5;
+            font-weight: 700;
+            display: inline-block;
+            min-width: 26px;
+        }
+        .node-head-usage .nh-muted { color: #9aa3b2; font-style: italic; }
+
+        /* Center: node name (stays in the middle). */
+        .node-head-name {
+            flex: 1;
+            text-align: center;
+            font-weight: 700;
+            font-size: 14px;
+            letter-spacing: 0.3px;
+            word-break: break-word;
+            min-width: 0;
+        }
+
+        /* Right block: healthy / unhealthy service counts (x/y). */
+        .node-head-count {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            flex: 0 0 56px;
+            font-size: 14px;
+            font-weight: 800;
+            line-height: 1.25;
+            text-align: center;
+            white-space: nowrap;
+        }
+        .node-head-count .nh-up { color: #34d399; }
+        .node-head-count .nh-down {
+            color: #f87171;
+            border-top: 2px solid rgba(255, 255, 255, 0.5);
+            margin-top: 2px;
+            padding-top: 2px;
+        }
+
+        .service-dice {
+            background: #fff;
+            border-radius: 10px;
+            padding: 10px 12px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s;
+            min-height: 46px;
+        }
+
+        .service-dice:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
+        }
+
+        .service-dice-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: #222;
+            word-break: break-word;
+            line-height: 1.3;
+            overflow: hidden;
+        }
+
+        .service-state {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            border: none;
+        }
+
+        .service-state.up {
+            background: #22c55e;
+            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.22);
+        }
+
+        .service-state.down {
+            background: #ef4444;
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.22);
+        }
+
+        .node-empty {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.85);
+            font-size: 12px;
+            padding: 8px;
         }
 
         #searchInput {
@@ -1371,14 +1551,28 @@
         .log-stream .log-row {
             display: block;
             cursor: pointer;
-            margin: 0 -16px;
-            padding: 1px 16px;
+            padding: 2px 0;
         }
         .log-stream .log-row:hover {
             background: #eef2ff;
         }
         .log-stream .log-row.selected {
             background: #d7e3ff;
+        }
+
+        /* Virtualized log list: the sizer is a tall spacer that gives the scrollbar
+           its real height, while only the visible window of rows is in the DOM. */
+        #logsSizer {
+            position: relative;
+            width: 100%;
+        }
+        #logsWindow {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            margin: 0;
+            padding: 0 16px;
         }
 
         /* Flat, single-tone (Portainer-style) toolbar buttons for the logs modal.
@@ -1581,71 +1775,9 @@
     <div class="container">
         <div class="header">
             <img src="ta9_logo.png" alt="TA9" class="header-logo">
-            <h1 style="margin-bottom: 20px;">Service Center</h1>
-            <div class="header-top">
-                <div class="header-left">
-                    <div class="controls">
-                        <label>
-                            Node:
-                            <select id="nodeSelector">
-                                <option value="">Home Page</option>
-                            </select>
-                        </label>
-                        <label id="messageNodeFilterLabel" style="display: none;">
-                            Filter by Node:
-                            <select id="messageNodeFilter">
-                                <option value="">All Nodes</option>
-                            </select>
-                        </label>
-                        <label id="filterStatusLabel">
-                            Filter:
-                            <select id="filterStatus">
-                                <option value="all">All Services</option>
-                                <option value="healthy">Healthy</option>
-                                <option value="unhealthy">Unhealthy</option>
-                            </select>
-                        </label>
-                        <input type="search" id="searchInput" placeholder="Search service..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; width: 200px;">
-                        <div class="export-control" id="exportControl" style="display: none;">
-                            <button id="exportButton" class="export-button" onclick="openExportModal()">Export Selected Services Logs</button>
-                            <div id="exportHint" class="export-hint">Please select one or more services to export.</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="header-right">
-                    <div class="usage-stats" id="usageStats" style="display: none;">
-                        <div class="usage-item">
-                            <div class="usage-circle">
-                                <svg width="70" height="70">
-                                    <circle class="bg" cx="35" cy="35" r="30"></circle>
-                                    <circle class="progress cpu" cx="35" cy="35" r="30" id="cpuCircle"></circle>
-                                </svg>
-                                <div class="usage-value" id="cpuValue">-</div>
-                            </div>
-                            <div class="usage-label">CPU</div>
-                        </div>
-                        <div class="usage-item">
-                            <div class="usage-circle">
-                                <svg width="70" height="70">
-                                    <circle class="bg" cx="35" cy="35" r="30"></circle>
-                                    <circle class="progress memory" cx="35" cy="35" r="30" id="memoryCircle"></circle>
-                                </svg>
-                                <div class="usage-value" id="memoryValue">-</div>
-                            </div>
-                            <div class="usage-label">Memory</div>
-                        </div>
-                        <div class="usage-item">
-                            <div class="usage-circle">
-                                <svg width="70" height="70">
-                                    <circle class="bg" cx="35" cy="35" r="30"></circle>
-                                    <circle class="progress disk" cx="35" cy="35" r="30" id="diskCircle"></circle>
-                                </svg>
-                                <div class="usage-value" id="diskValue">-</div>
-                            </div>
-                            <div class="usage-label">Disk</div>
-                        </div>
-                    </div>
-                </div>
+            <h1 style="margin: 0 0 16px 0;">Service Center</h1>
+            <div style="display: flex; justify-content: center;">
+                <input type="search" id="boardSearch" placeholder="Filter services by keyword..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
             </div>
         </div>
 
@@ -1653,18 +1785,30 @@
         <div id="loading" class="loading">Loading...</div>
 
         <div id="content" style="display: none;">
-            <div id="messagesSection" class="messages-section" style="display: none;">
-                <h2 id="messagesHeader" onclick="toggleMessages()" style="cursor: pointer; user-select: none;">
-                    <span class="status-unhealthy">⚠️</span> Unhealthy Services
-                    <span id="messagesCount" style="font-size: 13px; font-weight: 700; color: #d32f2f; background: #ffebee; padding: 2px 10px; border-radius: 12px;"></span>
-                    <span id="messagesChevron" style="margin-left: auto; transition: transform 0.2s; font-size: 18px; color: #888;">▾</span>
-                </h2>
-                <div id="messagesFilters" style="display: none; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; padding: 14px 16px; background: #f7f9ff; border: 1px solid #e6ebf7; border-radius: 10px;"></div>
-                <div id="messagesContainer" style="display: none;"></div>
+            <div id="legendSection" class="messages-section legend-section">
+                <h2 style="margin: 0 0 4px 0;">Service Status Guide</h2>
+                <div class="legend-cards">
+                    <div class="legend-card healthy">
+                        <span class="legend-dot up"></span>
+                        <div class="legend-text">
+                            <strong>Green - Healthy</strong>
+                            <span>All of the service's desired containers are in the <em>running</em> state.</span>
+                        </div>
+                    </div>
+                    <div class="legend-card unhealthy">
+                        <span class="legend-dot down"></span>
+                        <div class="legend-text">
+                            <strong>Red - Unhealthy</strong>
+                            <span>Fewer containers are running than desired.<br>A container may have crashed, failed, or is still starting, restarting, or pending.</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Kept (hidden) so favicon/sticky logic and node-view search still resolve their elements. -->
+                <select id="messageNodeFilter" style="display:none;"><option value="">All Nodes</option></select>
+                <input type="search" id="searchInput" style="display:none;">
             </div>
-            <div class="section" id="servicesSection">
-                <h2>Services</h2>
-                <div class="services-list" id="servicesContainer"></div>
+            <div class="section">
+                <div class="nodes-board" id="boardContainer"></div>
             </div>
         </div>
 
@@ -1691,12 +1835,12 @@
                         <span id="searchResultsCount" style="font-size: 12px; color: #666;"></span>
                     </div>
                     <!-- MIDDLE: how many latest logs + fetch -->
-                    <div class="logs-section" style="grid-column: 2; justify-self: center; min-width: 0; display: flex; align-items: flex-end; gap: 12px;">
-                        <div class="logs-control-group" style="min-width: 150px; width: 150px; margin: 0;">
-                            <label>How Many Latest Logs?</label>
+                    <div class="logs-section logs-control-group" style="grid-column: 2; justify-self: center; min-width: 0;">
+                        <label>How Many Latest Logs?</label>
+                        <div style="display: flex; align-items: center; gap: 12px;">
                             <input type="number" id="logCount" value="50" min="1" max="10000">
+                            <button id="fetchLogsBtn" class="fetch-logs-button" onclick="fetchLogs()" style="padding: 8px 14px; font-size: 13px; font-weight: 600; min-width: 110px; background: #667eea;">Fetch Logs</button>
                         </div>
-                        <button id="fetchLogsBtn" class="fetch-logs-button" onclick="fetchLogs()" style="padding: 8px 14px; font-size: 13px; font-weight: 600; min-width: 110px; background: #667eea;">Fetch Logs</button>
                     </div>
                     <!-- RIGHT: error-level filters -->
                     <div id="errorLevelFilter" class="logs-section" style="grid-column: 3; justify-self: start; min-width: 0; display: none; align-items: center; gap: 8px; flex-wrap: wrap;">
@@ -1709,26 +1853,6 @@
                 </div>
                 <div id="timeRangeValidation" style="display:none; margin-top: 10px; text-align:center; font-size: 13px; font-weight: 600; color: #d32f2f;"></div>
                 <div class="logs-container pre-fetch-hidden" id="logsContainer" style="margin-top: 20px;"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Export Modal -->
-    <div id="exportModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Export Service Logs</h2>
-                <button class="close-modal" onclick="closeExportModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p style="margin-bottom: 20px; color: #666;">Configure how many logs to export from each selected service:</p>
-                <div class="export-config" id="exportConfig">
-                    <!-- Will be filled dynamically -->
-                </div>
-                <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
-                    <button onclick="closeExportModal()" style="background: #999;">Cancel</button>
-                    <button id="performExportBtn" onclick="performExport()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">Export to File</button>
-                </div>
             </div>
         </div>
     </div>
@@ -1871,167 +1995,172 @@
         
         async function fetchData() {
             if (window.__isFetchingData) return;
-            // Don't refresh when modal is open to prevent flickering
+            // Don't refresh when the logs modal is open to prevent flicker / losing the click target.
             const modal = document.getElementById('logsModal');
             if (modal && modal.classList.contains('show')) {
                 return;
             }
             window.__isFetchingData = true;
-            const startNode = currentNodeName;
-            let timeoutId;
-            
             try {
-                // If no node selected, show unhealthy services only (no usage stats)
-                if (!currentNodeName) {
-                    // Show UI immediately - hide usage stats since no node selected
-                    document.querySelector('.section').style.display = 'none';
-                    document.getElementById('usageStats').style.display = 'none';
-                    document.querySelector('.messages-section').style.display = 'block';
-                    document.getElementById('exportControl').style.display = 'none';
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('content').style.display = 'block';
-                    document.getElementById('error').classList.remove('show');
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+                document.getElementById('error').classList.remove('show');
 
-                    fetchAbortController = new AbortController();
-                    timeoutId = setTimeout(() => {
-                        try { fetchAbortController.abort(); } catch {}
-                    }, 10000); // Reduced to 10s
+                // Unhealthy summary (background, non-blocking).
+                fetch(API_URL + '/messages')
+                    .then(resp => resp.ok ? resp.json() : [])
+                    .then(renderMessages)
+                    .catch(e => { if (e.name !== 'AbortError') console.error('Messages error:', e); });
 
-                    // Fetch messages in background - don't block UI
-                    fetch(API_URL + '/messages', { signal: fetchAbortController.signal })
-                        .then(resp => resp.ok ? resp.json() : [])
-                        .then(renderMessages)
-                        .catch(e => { if (e.name !== 'AbortError') console.error('Messages error:', e); });
-                    
-                    // Don't wait for fetches - UI is already shown
-                    window.__isFetchingData = false;
-                    return;
-                }
-
-                fetchAbortController = new AbortController();
-                timeoutId = setTimeout(() => {
-                    try { fetchAbortController.abort(); } catch {}
-                }, 20000);
-
-                // Show services section and usage stats, hide messages, show export button
-                document.querySelector('.section').style.display = 'block';
-                document.getElementById('usageStats').style.display = 'flex';
-                document.querySelector('.messages-section').style.display = 'none';
-                document.getElementById('exportControl').style.display = 'block';
-
-                const hostUsagePromise = (async () => {
-                    try {
-                        const usageRes = await fetch(API_URL + '/usage?nodeName=' + currentNodeName + '&t=' + Date.now(), { cache: 'no-store', signal: fetchAbortController.signal });
-                        if (usageRes.ok && startNode === currentNodeName) {
-                            updateUsageStats(await usageRes.json());
-                        }
-                    } catch (e) {
-                        if (e.name !== 'AbortError') console.error('Usage error:', e);
-                    }
-                })();
-                
-                let servicesRes;
-                try {
-                    servicesRes = await fetch(API_URL + '/services?nodeName=' + currentNodeName, { signal: fetchAbortController.signal });
-                } catch (e) {
-                    if (e.name === 'AbortError') return;
-                    throw e;
-                }
-                
-                if (!servicesRes.ok) throw new Error('Failed to fetch services');
-                allServices = await servicesRes.json();
-
-                if (startNode === currentNodeName) {
-                    renderServices();
-                    updateLastUpdate();
-                    document.getElementById('error').classList.remove('show');
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('content').style.display = 'block';
-                    
-                    // Start 1-second usage polling for server-level stats
-                    startUsagePolling();
-                }
-
-                // Only fetch host usage - services-usage removed
-                Promise.allSettled([hostUsagePromise])
-                    .finally(() => { if (timeoutId) clearTimeout(timeoutId); });
+                // Board: every configured node and its services.
+                await loadBoard();
+                updateLastUpdate();
             } catch (err) {
-                if (err.name !== 'AbortError' && startNode === currentNodeName) {
-                    console.error('Fetch error:', err);
-                    showError(err.message);
-                }
+                console.error('Fetch error:', err);
             } finally {
                 window.__isFetchingData = false;
-                if (timeoutId) clearTimeout(timeoutId);
             }
         }
 
-        function renderServices() {
-            const container = document.getElementById('servicesContainer');
-            const filterValue = document.getElementById('filterStatus').value;
-            const searchValue = document.getElementById('searchInput').value.toLowerCase();
-            
-            // Check if modal is open for unhealthy services - if so, don't render services
-            const logsModal = document.getElementById('logsModal');
-            const servicesSection = document.getElementById('servicesSection');
-            if (logsModal && logsModal.classList.contains('show') && window.__logsNodeName) {
-                // Modal is open for unhealthy service - keep services hidden
-                if (servicesSection) servicesSection.style.display = 'none';
-                return; // Don't render services at all
+        // Fetch all nodes, then each node's services in parallel, and render the board.
+        async function loadBoard() {
+            let nodes = [];
+            try {
+                const r = await fetch(API_URL + '/nodes-list');
+                nodes = r.ok ? await r.json() : [];
+            } catch (e) {
+                console.error('nodes-list error:', e);
             }
-            
-            // Make sure services section is visible when rendering normally
-            if (servicesSection) servicesSection.style.display = 'block';
-            
-            let services = allServices;
-            if (filterValue === 'healthy') {
-                services = allServices.filter(s => s.status === 'healthy');
-            } else if (filterValue === 'unhealthy') {
-                services = allServices.filter(s => s.status === 'unhealthy');
-            }
+            if (!Array.isArray(nodes) || nodes.length === 0) return;
 
-            // Filter by search input
-            if (searchValue) {
-                services = services.filter(s => s.name.toLowerCase().includes(searchValue));
-            }
+            // Fetch services per node and paint the board AS SOON as they arrive.
+            // Usage (CPU/RAM/DISK) is slower — the live-CPU sample alone costs ~0.5s
+            // per node — so it must NOT gate the first paint. We fetch it separately
+            // and patch each header in place when it lands.
+            const perNode = await Promise.all(nodes.map(async (n) => {
+                let services = [];
+                try {
+                    const ac = new AbortController();
+                    const to = setTimeout(() => { try { ac.abort(); } catch {} }, 25000);
+                    const r = await fetch(API_URL + '/services?nodeName=' + encodeURIComponent(n.name), { signal: ac.signal });
+                    clearTimeout(to);
+                    const data = r.ok ? await r.json() : [];
+                    services = Array.isArray(data) ? data : [];
+                } catch (e) {}
+                // Reuse previously-known usage so a refresh doesn't blank the numbers.
+                const prev = (lastBoardData || []).find(x => x.name === n.name);
+                return { name: n.name, services, usage: prev ? prev.usage || null : null };
+            }));
 
-            if (services.length === 0) {
-                container.innerHTML = '<div class="no-services">No services found</div>';
+            renderBoard(perNode);
+
+            // Background: fetch live usage and patch headers without re-rendering.
+            nodes.forEach((n) => {
+                (async () => {
+                    try {
+                        const ac = new AbortController();
+                        const to = setTimeout(() => { try { ac.abort(); } catch {} }, 25000);
+                        const r = await fetch(API_URL + '/usage?nodeName=' + encodeURIComponent(n.name), { signal: ac.signal });
+                        clearTimeout(to);
+                        if (!r.ok) return;
+                        const usage = await r.json();
+                        updateNodeUsageInPlace(n.name, usage);
+                        const node = (lastBoardData || []).find(x => x.name === n.name);
+                        if (node) node.usage = usage;
+                    } catch (e) {}
+                })();
+            });
+        }
+
+        // One column per node: a node-name "dice" on top, then a clickable dice per
+        // service with a green/red state indicator. Clicking opens the logs modal.
+        // Most recent board data + the header keyword filter, so the filter can be
+        // re-applied instantly (and survives the 5s auto-refresh).
+        let lastBoardData = [];
+        let boardSearchTerm = '';
+
+        // Compact CPU/RAM/DISK block for a node header. `null` usage renders a
+        // loading placeholder so the board can paint instantly and fill in later.
+        function buildNodeUsageHtml(u) {
+            const pct = (v) => (v == null || isNaN(v)) ? '–' : Math.round(v) + '%';
+            if (!u) return `<div class="nh-stat"><b>CPU</b> …</div><div class="nh-stat"><b>RAM</b> …</div><div class="nh-stat"><b>DISK</b> …</div>`;
+            return `<div class="nh-stat"><b>CPU</b> ${pct(u.cpu)}</div><div class="nh-stat"><b>RAM</b> ${pct(u.memory)}</div><div class="nh-stat"><b>DISK</b> ${pct(u.disk)}</div>`;
+        }
+
+        // Update just one node header's usage numbers without rebuilding the board.
+        function updateNodeUsageInPlace(nodeName, usage) {
+            const sel = `.node-head[data-node="${(window.CSS && CSS.escape) ? CSS.escape(nodeName) : nodeName}"] .node-head-usage`;
+            const el = document.querySelector(sel);
+            if (el) el.innerHTML = buildNodeUsageHtml(usage);
+        }
+
+        function renderBoard(board) {
+            const container = document.getElementById('boardContainer');
+            if (!container) return;
+            // Never rebuild while the logs modal is open (would drop the click target).
+            const modal = document.getElementById('logsModal');
+            if (modal && modal.classList.contains('show')) return;
+
+            if (Array.isArray(board)) lastBoardData = board;
+
+            const term = boardSearchTerm.trim().toLowerCase();
+            // Keep only services whose name matches the keyword; when filtering, drop
+            // nodes that have no matches so only relevant columns show.
+            let nodes = (lastBoardData || []).map(node => ({
+                name: node.name,
+                usage: node.usage || null,
+                allServices: node.services || [],
+                services: (node.services || []).filter(s => !term || String(s.name).toLowerCase().includes(term))
+            }));
+            if (term) nodes = nodes.filter(n => n.services.length > 0);
+
+            if (!nodes.length) {
+                container.style.gridTemplateColumns = '1fr';
+                container.innerHTML = `<div class="no-services" style="color:#fff;">${term ? 'No services match “' + escapeHtml(term) + '”.' : 'No services found.'}</div>`;
                 return;
             }
 
-            container.innerHTML = services.map(service => {
-                // Check if this service is already selected
-                const isSelected = Array.from(selectedServices).some(s => {
-                    try {
-                        const selectedService = JSON.parse(s);
-                        return selectedService.id === service.id;
-                    } catch (e) {
-                        return false;
-                    }
-                });
-                
+            const cols = Math.min(nodes.length, 10);
+            // Equal columns (symmetric). minmax keeps each at least 150px wide so
+            // service names stay readable; if all columns can't fit, the board
+            // scrolls horizontally instead of squashing them.
+            container.style.gridTemplateColumns = `repeat(${cols}, minmax(150px, 1fr))`;
+
+            container.innerHTML = nodes.map(node => {
+                // Red (unhealthy) services first — sorted a–z — then green (healthy)
+                // services, also sorted a–z.
+                const services = (node.services || []).slice()
+                    .sort((a, b) => {
+                        const ra = a.status === 'healthy' ? 1 : 0;
+                        const rb = b.status === 'healthy' ? 1 : 0;
+                        if (ra !== rb) return ra - rb;
+                        return String(a.name).localeCompare(String(b.name));
+                    });
+                const tiles = services.map(s => `
+                    <div class="service-dice" data-id="${escapeHtml(s.id)}" data-name="${escapeHtml(s.name)}" data-node="${escapeHtml(node.name)}" title="${escapeHtml(s.name)}">
+                        <span class="service-dice-name">${escapeHtml(s.name)}</span>
+                        <span class="service-state ${s.status === 'healthy' ? 'up' : 'down'}" title="${escapeHtml(s.status || '')}"></span>
+                    </div>`).join('');
+                // Health summary for this node (uses the node's full service list,
+                // so the x/y count is stable regardless of the keyword filter).
+                const summarySvcs = node.allServices || services;
+                const healthyCount = summarySvcs.filter(s => s.status === 'healthy').length;
+                const unhealthyCount = summarySvcs.length - healthyCount;
+
+                const usageHtml = buildNodeUsageHtml(node.usage);
+
                 return `
-                <div class="card service-card">
-                    <div class="card-header">
-                        <input type="checkbox" class="service-checkbox" data-service-id="${service.id}" data-service-name="${escapeHtml(service.name)}" onchange="toggleServiceSelection(this)" ${isSelected ? 'checked' : ''}>
-                        <h3>${escapeHtml(service.name)}</h3>
-                    </div>
-                    <div class="card-actions">
-                        <button class="logs-button" onclick="openLogsModal('${service.id}', '${escapeHtml(service.name)}')">
-                            📋 Logs
-                        </button>
-                    </div>
-                    <span class="badge status-${service.status}">
-                        <span class="status-indicator ${service.status}"></span>
-                        ${service.status === 'healthy' ? 'Healthy' : 'Unhealthy'}
-                    </span>
-                </div>
-            `;
+                    <div class="node-column">
+                        <div class="node-head" data-node="${escapeHtml(node.name)}">
+                            <div class="node-head-usage">${usageHtml}</div>
+                            <div class="node-head-name">${escapeHtml(node.name)}</div>
+                            <div class="node-head-count" title="${healthyCount} healthy / ${unhealthyCount} unhealthy">
+                                <span class="nh-up">${healthyCount}</span><span class="nh-down">${unhealthyCount}</span>
+                            </div>
+                        </div>
+                        ${services.length ? tiles : '<div class="node-empty">No services</div>'}
+                    </div>`;
             }).join('');
-            
-            // Update favicon based on ALL services (not filtered), and check for unhealthy messages
-            // Don't update favicon here - let renderMessages handle it to avoid conflicts
         }
 
         // Cache of the most recent /api/messages response so the search input can
@@ -2201,8 +2330,9 @@
             return selector.value || '';
         }
 
-        // Unhealthy Services starts collapsed; the user expands it by clicking the
-        // header. The state persists across the 5s auto-refresh.
+        // Legacy collapse state for the old unhealthy-services dropdown, kept so
+        // toggleMessages()/applyMessagesCollapseState() stay defined (now no-ops
+        // since the list was replaced by the static status guide).
         let messagesCollapsed = true;
         function applyMessagesCollapseState() {
             const container = document.getElementById('messagesContainer');
@@ -2271,6 +2401,14 @@
 
             // Effective unhealthy list for display = everything still sticky.
             const unhealthyMessages = Array.from(stickyUnhealthy.values()).map(e => e.msg);
+
+            // The visible unhealthy-services list was replaced by a static status
+            // guide, so renderMessages now only keeps the tab favicon in sync with
+            // whether anything is unhealthy globally.
+            updateFavicon(allServices, unhealthyMessages);
+            return;
+
+            // ---- legacy list rendering (no longer reached) ----
             const selectedNodeName = syncMessageNodeFilterOptions(unhealthyMessages);
 
             if (unhealthyMessages.length === 0) {
@@ -2459,10 +2597,12 @@
             document.getElementById('loading').style.display = 'none';
         }
 
+        // Pure-string escape. Far faster than the old createElement/innerHTML
+        // approach (which did a DOM op per call) — critical when building tens of
+        // thousands of log rows. Also escapes quotes, so it's safe in attributes.
+        const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
         function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+            return String(text == null ? '' : text).replace(/[&<>"']/g, ch => HTML_ESCAPES[ch]);
         }
 
         // Service control functions
@@ -2740,6 +2880,138 @@
         let activeLogDiagnosisTypingTimer = null;
         let activeLogDiagnosisRequestVersion = 0;
 
+        // ---- Virtualized log list -------------------------------------------------
+        // Only the rows in/near the viewport are kept in the DOM; a tall sizer gives
+        // the scrollbar its real size. This keeps the DOM at ~(visible + overscan)
+        // rows, so scrolling, filtering and selecting stay smooth even at 10k+ rows.
+        const V_OVERSCAN = 12;          // extra rows rendered above & below the viewport
+        const V_TOP_PAD = 12;
+        const V_BOT_PAD = 12;
+        const V_CHARS_PER_LINE = 200;   // monospace wrap estimate in the wide modal
+        const V_LINE_PX = 17;           // ≈ line-height
+        let vOffsets = [V_TOP_PAD];     // cumulative top of each row (px), length N+1
+        let vHeights = [];              // per-row measured/estimated height (px), length N
+        let vSelectedIndex = -1;        // highlighted row index (into visibleFetchedLogs)
+        let vScrollScheduled = false;
+        let logsScrollBound = false;
+
+        function estimateLogHeight(log) {
+            const lines = String(log.message || '').split('\n');
+            let visual = Math.max(1, Math.ceil((30 + (lines[0] || '').length) / V_CHARS_PER_LINE));
+            for (let i = 1; i < lines.length; i++) {
+                visual += Math.max(1, Math.ceil(lines[i].length / V_CHARS_PER_LINE));
+            }
+            return visual * V_LINE_PX + 6;
+        }
+
+        function buildLogOffsets() {
+            const n = visibleFetchedLogs.length;
+            vHeights = new Array(n);
+            vOffsets = new Array(n + 1);
+            vOffsets[0] = V_TOP_PAD;
+            for (let i = 0; i < n; i++) {
+                vHeights[i] = estimateLogHeight(visibleFetchedLogs[i]);
+                vOffsets[i + 1] = vOffsets[i] + vHeights[i];
+            }
+        }
+
+        function vTotalHeight() {
+            return (vOffsets.length ? vOffsets[vOffsets.length - 1] : V_TOP_PAD) + V_BOT_PAD;
+        }
+
+        // first index i where vOffsets[i] > x  (binary search)
+        function vUpperBound(x) {
+            let lo = 0, hi = vOffsets.length;
+            while (lo < hi) {
+                const mid = (lo + hi) >> 1;
+                if (vOffsets[mid] <= x) lo = mid + 1; else hi = mid;
+            }
+            return lo;
+        }
+
+        function logRowHtml(log, idx, searchTerm) {
+            const timestamp = formatLogTimestamp(log.timestamp || '');
+            const level = String(log.level || 'info').toUpperCase();
+            const lines = String(log.message || '').split('\n');
+            const firstRow = `${timestamp} ${level} ${lines[0] || ''}`;
+            let inner = highlightLogMessage(firstRow, searchTerm);
+            for (let i = 1; i < lines.length; i++) {
+                inner += `<span class="log-cont-row">${highlightLogMessage(lines[i], searchTerm)}</span>`;
+            }
+            const sel = idx === vSelectedIndex ? ' selected' : '';
+            return `<div class="log-row${sel}" data-vi="${idx}">${inner}</div>`;
+        }
+
+        // Render only the rows visible (plus overscan); measure them to correct the
+        // size estimates so the scrollbar/offsets converge to the real layout.
+        // Measure every row's real (wrapped/multi-line) height ONCE by rendering the
+        // full list a single time, then store exact offsets. After this the offsets
+        // never change, so scrolling can't shift the scrollbar — it stays buttery and
+        // dragging to the very top/bottom lands exactly. This is the only heavy step
+        // and it runs once per fetch/filter (the spinner covers it); afterwards only
+        // the ~visible window is ever in the DOM.
+        function measureAllHeights() {
+            const win = document.getElementById('logsWindow');
+            const sizer = document.getElementById('logsSizer');
+            if (!win || !sizer) return;
+            const n = visibleFetchedLogs.length;
+            if (!n) { sizer.style.height = '0px'; return; }
+
+            const term = currentLogSearchTerm;
+            let html = '';
+            for (let i = 0; i < n; i++) html += logRowHtml(visibleFetchedLogs[i], i, term);
+            win.style.top = V_TOP_PAD + 'px';
+            win.innerHTML = html;                 // all rows in DOM transiently (one layout)
+
+            const kids = win.children;
+            vOffsets[0] = V_TOP_PAD;
+            for (let i = 0; i < n; i++) {
+                if (kids[i]) vHeights[i] = kids[i].offsetHeight;
+                vOffsets[i + 1] = vOffsets[i] + vHeights[i];
+            }
+            sizer.style.height = vTotalHeight() + 'px';
+        }
+
+        function renderLogWindow() {
+            const container = document.getElementById('logsContainer');
+            const sizer = document.getElementById('logsSizer');
+            const win = document.getElementById('logsWindow');
+            if (!container || !sizer || !win) return;
+
+            const n = visibleFetchedLogs.length;
+            if (!n) { win.innerHTML = ''; sizer.style.height = '0px'; return; }
+
+            const scrollTop = container.scrollTop;
+            const viewH = container.clientHeight || 400;
+            let start = vUpperBound(scrollTop) - 1;
+            if (start < 0) start = 0;
+            let end = vUpperBound(scrollTop + viewH);
+            if (end > n) end = n;
+            start = Math.max(0, start - V_OVERSCAN);
+            end = Math.min(n, end + V_OVERSCAN);
+
+            const term = currentLogSearchTerm;
+            let html = '';
+            for (let i = start; i < end; i++) html += logRowHtml(visibleFetchedLogs[i], i, term);
+            // Offsets are exact (measured once), so the window simply sits at its known
+            // position — no per-scroll measuring, no height changes, no jump.
+            win.style.top = vOffsets[start] + 'px';
+            win.innerHTML = html;
+            sizer.style.height = vTotalHeight() + 'px';
+        }
+
+        function ensureLogsScrollListener() {
+            if (logsScrollBound) return;
+            const container = document.getElementById('logsContainer');
+            if (!container) return;
+            logsScrollBound = true;
+            container.addEventListener('scroll', () => {
+                if (vScrollScheduled) return;
+                vScrollScheduled = true;
+                requestAnimationFrame(() => { vScrollScheduled = false; renderLogWindow(); });
+            }, { passive: true });
+        }
+
         function getLogsModalBody() {
             const logsModal = document.getElementById('logsModal');
             return logsModal ? logsModal.querySelector('.modal-body') : null;
@@ -2760,9 +3032,11 @@
                 if (window.getSelection && String(window.getSelection()).length > 0) return;
                 const row = e.target.closest('.log-row');
                 if (!row || !container.contains(row)) return;
-                const wasSelected = row.classList.contains('selected');
-                container.querySelectorAll('.log-row.selected').forEach(r => r.classList.remove('selected'));
-                if (!wasSelected) row.classList.add('selected');
+                // Selection is tracked by index (rows are recycled by virtualization),
+                // so the highlight survives scrolling. Click again to clear.
+                const idx = Number.parseInt(row.dataset.vi, 10);
+                vSelectedIndex = (vSelectedIndex === idx) ? -1 : idx;
+                renderLogWindow();
             });
         }
 
@@ -2795,10 +3069,26 @@
             const container = document.getElementById('logsContainer');
             if (!container) return;
 
-            requestAnimationFrame(() => {
+            // Jump to the bottom, render that window (which measures the bottom rows
+            // and corrects the total height), then re-pin until the height settles —
+            // so we land exactly on the newest logs even though heights are estimated.
+            let frames = 0;
+            let lastHeight = -1;
+            const pin = () => {
                 container.scrollTop = container.scrollHeight;
-                updateExportFetchedBtnVisibility();
-            });
+                renderLogWindow();
+                const h = container.scrollHeight;
+                frames++;
+                if ((h !== lastHeight || frames < 4) && frames < 24) {
+                    lastHeight = h;
+                    requestAnimationFrame(pin);
+                } else {
+                    container.scrollTop = container.scrollHeight;
+                    renderLogWindow();
+                    updateExportFetchedBtnVisibility();
+                }
+            };
+            requestAnimationFrame(pin);
         }
 
         function scrollLogsToTop() {
@@ -2807,6 +3097,7 @@
 
             requestAnimationFrame(() => {
                 container.scrollTop = 0;
+                renderLogWindow();
                 updateExportFetchedBtnVisibility();
             });
         }
@@ -3365,17 +3656,21 @@
         }
 
         function applyLogViewFilters(options = {}) {
-            const searchMatchedLogs = getSearchMatchedLogs(allFetchedLogs, currentLogSearchTerm);
-            const availableLevels = getLogLevelSet(searchMatchedLogs);
+            const availableLevels = getLogLevelSet(allFetchedLogs);
 
             if (currentLogFilterLevel !== 'all' && !availableLevels.has(currentLogFilterLevel)) {
                 currentLogFilterLevel = 'all';
             }
 
+            // Keyword search only HIGHLIGHTS matches inside the rows (see
+            // logRowHtml/highlightLogMessage); it never removes rows. Row
+            // visibility is governed solely by the level filter, so every fetched
+            // row stays on screen when you search.
             visibleFetchedLogs = currentLogFilterLevel === 'all'
-                ? searchMatchedLogs
-                : searchMatchedLogs.filter(log => String(log.level || 'info').toLowerCase() === currentLogFilterLevel);
+                ? allFetchedLogs
+                : allFetchedLogs.filter(log => String(log.level || 'info').toLowerCase() === currentLogFilterLevel);
 
+            const searchMatchedLogs = getSearchMatchedLogs(visibleFetchedLogs, currentLogSearchTerm);
             updateFilterOptions(availableLevels);
             updateSearchResultsCount(searchMatchedLogs, visibleFetchedLogs);
 
@@ -3457,32 +3752,17 @@
             }
 
             lastRenderedLogRangeKey = rangeKey;
+            vSelectedIndex = -1;
 
-            // Each log entry is its own clickable .log-row block so a click can
-            // highlight it (like Portainer). A multi-line entry (e.g. a stack
-            // trace) keeps its first row at the base column and indents every
-            // continuation row one tab right via block spans (hanging indent).
-            const searchTerm = currentLogSearchTerm;
-            let streamHtml = '';
-            for (const log of visibleFetchedLogs) {
-                const timestamp = formatLogTimestamp(log.timestamp || '');
-                const level = String(log.level || 'info').toUpperCase();
-                const lines = String(log.message || '').split('\n');
-                const firstRow = `${timestamp} ${level} ${lines[0] || ''}`;
-
-                let rowHtml = highlightLogMessage(firstRow, searchTerm);
-                for (let i = 1; i < lines.length; i++) {
-                    rowHtml += `<span class="log-cont-row">${highlightLogMessage(lines[i], searchTerm)}</span>`;
-                }
-                streamHtml += `<div class="log-row">${rowHtml}</div>`;
-            }
-
-            container.innerHTML = `
-                <pre class="log-stream">${streamHtml}</pre>
-                ${renderFetchedLogsSummary()}
-            `;
-
+            // Virtualized: build the row-height map and the sizer/window structure,
+            // then render only the visible window. The DOM stays tiny (≈ visible +
+            // overscan rows) regardless of how many logs were fetched.
+            container.innerHTML = '<div id="logsSizer"><pre class="log-stream" id="logsWindow"></pre></div>';
+            buildLogOffsets();
+            ensureLogsScrollListener();
             initLogsRowSelection();
+            measureAllHeights();   // one-time exact measurement → stable offsets
+            renderLogWindow();
 
             const errorLevelFilter = document.getElementById('errorLevelFilter');
             if (errorLevelFilter) {
@@ -3497,7 +3777,7 @@
             // Switch the control bar to the symmetric 3-section (thirds) layout.
             document.getElementById('logsControlBar')?.classList.add('fetched');
 
-            updateFilterOptions(getLogLevelSet(getSearchMatchedLogs(allFetchedLogs, currentLogSearchTerm)));
+            updateFilterOptions(getLogLevelSet(allFetchedLogs));
             updateVisibleLogDiagnoseButtons();
 
             const exportFetchedBtn = document.getElementById('exportFetchedBtn');
@@ -3513,7 +3793,7 @@
         function searchInLogs() {
             const searchInput = document.getElementById('searchLogsInput');
             currentLogSearchTerm = searchInput.value.trim().toLowerCase();
-            applyLogViewFilters({ scrollToTop: true });
+            applyLogViewFilters({ scrollToNewest: true });
         }
 
         function clearLogSearch() {
@@ -3528,14 +3808,21 @@
 
         function exportCurrentLogs() {
             const serviceName = document.getElementById('modalServiceName').textContent || 'service';
+            // Export exactly what's currently shown: when a level filter is active,
+            // only those filtered rows are exported (not the full fetched set).
+            const logsToExport = visibleFetchedLogs;
+            const levelNote = currentLogFilterLevel === 'all'
+                ? 'All fetched logs'
+                : `Filtered by level: ${currentLogFilterLevel.toUpperCase()}`;
             let exportText = '========================================\n';
             exportText += `SERVICE LOGS EXPORT - ${serviceName}\n`;
             exportText += `Export Date: ${new Date().toISOString()}\n`;
+            exportText += `Scope: ${levelNote} (${logsToExport.length} rows)\n`;
             exportText += '========================================\n\n';
-            if (!allFetchedLogs.length) {
+            if (!logsToExport.length) {
                 exportText += 'No logs to export.\n';
             } else {
-                allFetchedLogs.forEach(log => {
+                logsToExport.forEach(log => {
                     const ts = formatLogTimestamp(log.timestamp || '');
                     const level = String(log.level || 'info').toUpperCase();
                     const msg = String(log.message || '').trim();
@@ -3624,7 +3911,7 @@
                     });
 
                     currentLogFilterLevel = level;
-                    applyLogViewFilters({ scrollToTop: true });
+                    applyLogViewFilters({ scrollToNewest: true });
                 });
             });
         }
@@ -3659,102 +3946,27 @@
 
         document.getElementById('logCount').addEventListener('input', validateTimeRangeAndToggleFetch);
 
-        document.getElementById('nodeSelector').addEventListener('change', async function() {
-            const nextNode = this.value;
-            console.log('[nodeSelector] Changed to:', nextNode);
-            
-            // Stop usage polling when switching\n            stopUsagePolling();
-            
-            // Abort in-flight requests immediately
-            if (fetchAbortController) {
-                try { fetchAbortController.abort(); } catch {}
-            }
-            
-            // Clear guard
-            window.__isFetchingData = false;
-            
-            // Clear any stored node name from previous modal views
-            delete window.__logsNodeName;
-            
-            // Update node
-            currentNodeName = nextNode;
-            console.log('[nodeSelector] Set currentNodeName to:', currentNodeName);
-            
-            // If switching to homepage (no node), show UI immediately
-            if (!currentNodeName) {
-                // Pause auto-refresh
-                if (refreshInterval) clearInterval(refreshInterval), refreshInterval = null;
-                
-                // Show homepage UI instantly - hide usage stats since no node selected
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('content').style.display = 'block';
-                document.querySelector('.section').style.display = 'none';
-                document.getElementById('usageStats').style.display = 'none';
-                document.querySelector('.messages-section').style.display = 'block';
-                document.getElementById('exportControl').style.display = 'none';
-                document.getElementById('error').classList.remove('show');
-                // Hide the healthy/unhealthy dropdown — every entry here is already unhealthy.
-                const fsLabel = document.getElementById('filterStatusLabel');
-                if (fsLabel) fsLabel.style.display = 'none';
-                const messageNodeFilterLabel = document.getElementById('messageNodeFilterLabel');
-                if (messageNodeFilterLabel) messageNodeFilterLabel.style.display = '';
-                placeUnhealthyFilters(true);
-
-                // Fetch data in background without blocking
-                setTimeout(() => fetchData(), 0);
-                
-                // Resume auto-refresh
-                refreshInterval = setInterval(fetchData, 5000);
-            } else {
-                // Pause auto-refresh
-                if (refreshInterval) clearInterval(refreshInterval), refreshInterval = null;
-                
-                allServices = [];
-                document.getElementById('error').classList.remove('show');
-                // Keep content visible, just show a subtle loading indicator
-                document.getElementById('content').style.display = 'block';
-                document.getElementById('loading').style.display = 'none';
-                // Update section visibility - show usage stats when node selected
-                document.querySelector('.section').style.display = 'block';
-                document.getElementById('usageStats').style.display = 'flex';
-                document.querySelector('.messages-section').style.display = 'none';
-                document.getElementById('exportControl').style.display = 'block';
-                // Re-show the healthy/unhealthy dropdown for per-node views.
-                const fsLabel = document.getElementById('filterStatusLabel');
-                if (fsLabel) fsLabel.style.display = '';
-                const messageNodeFilterLabel = document.getElementById('messageNodeFilterLabel');
-                if (messageNodeFilterLabel) messageNodeFilterLabel.style.display = 'none';
-                placeUnhealthyFilters(false);
-                // Clear services container to show it's loading
-                document.getElementById('servicesContainer').innerHTML = '<div class="loading" style="display:block; color:#555;">Loading Services<span class="ai-thinking-dots"></span></div>';
-                
-                try {
-                    await fetchData();
-                } catch (err) {
-                    console.error('Switch error:', err);
-                }
-                
-                // Resume auto-refresh
-                refreshInterval = setInterval(fetchData, 5000);
-            }
-        });
-
-        document.getElementById('filterStatus').addEventListener('change', renderServices);
-
+        // Filter-by-Node and Search both re-filter the unhealthy list.
         document.getElementById('messageNodeFilter').addEventListener('change', () => {
-            if (!currentNodeName) {
-                renderMessages(latestMessages);
-            }
+            renderMessages(latestMessages);
         });
 
         document.getElementById('searchInput').addEventListener('input', () => {
-            // The search input is shared between the per-node services view and
-            // the unhealthy services view. Re-render whichever is visible.
-            if (currentNodeName) {
-                renderServices();
-            } else {
-                renderMessages(latestMessages);
-            }
+            renderMessages(latestMessages);
+        });
+
+        // Click a service dice on the board to open that service's logs (same modal).
+        document.getElementById('boardContainer').addEventListener('click', (e) => {
+            const dice = e.target.closest('.service-dice');
+            if (!dice) return;
+            openLogsModalForUnhealthy(dice.dataset.id, dice.dataset.name, dice.dataset.node);
+        });
+
+        // Header keyword filter: re-render the board (from cached data) showing only
+        // services whose name contains the keyword. Does not touch unhealthy services.
+        document.getElementById('boardSearch').addEventListener('input', (e) => {
+            boardSearchTerm = e.target.value || '';
+            renderBoard();
         });
 
         // Close modal on outside click
@@ -3764,246 +3976,23 @@
             }
         });
 
-        function toggleServiceSelection(checkbox) {
-            const serviceId = checkbox.dataset.serviceId;
-            const serviceName = checkbox.dataset.serviceName;
-            
-            if (checkbox.checked) {
-                selectedServices.add(JSON.stringify({id: serviceId, name: serviceName}));
-            } else {
-                selectedServices.delete(JSON.stringify({id: serviceId, name: serviceName}));
-            }
-
-            if (selectedServices.size > 0) {
-                hideExportSelectionHint();
-            }
-        }
-
-        function showExportSelectionHint() {
-            const hint = document.getElementById('exportHint');
-            if (!hint) return;
-            if (exportHintTimeout) {
-                clearTimeout(exportHintTimeout);
-            }
-            hint.style.display = 'block';
-            exportHintTimeout = setTimeout(() => {
-                hideExportSelectionHint();
-            }, 5000);
-        }
-
-        function hideExportSelectionHint() {
-            const hint = document.getElementById('exportHint');
-            if (!hint) return;
-            if (exportHintTimeout) {
-                clearTimeout(exportHintTimeout);
-                exportHintTimeout = null;
-            }
-            hint.style.display = 'none';
-        }
-
-        function validateExportInputs() {
-            let allValid = true;
-            selectedServices.forEach(serviceStr => {
-                const service = JSON.parse(serviceStr);
-                const input = document.getElementById(`logs-count-${service.id}`);
-                const errorDiv = document.querySelector(`.export-error-msg-${service.id}`);
-                const value = parseInt(input.value);
-                
-                if (isNaN(value) || value < 1) {
-                    errorDiv.textContent = `Please enter a number between 1 and ${MAX_LOG_ROWS.toLocaleString()}`;
-                    errorDiv.style.display = 'block';
-                    allValid = false;
-                } else if (value > MAX_LOG_ROWS) {
-                    errorDiv.textContent = `⚠️ Maximum ${MAX_LOG_ROWS.toLocaleString()} logs allowed`;
-                    errorDiv.style.display = 'block';
-                    allValid = false;
-                } else {
-                    errorDiv.style.display = 'none';
-                }
-            });
-            
-            // Update export button state
-            const exportButton = document.getElementById('performExportBtn');
-            if (exportButton) {
-                exportButton.disabled = !allValid;
-                exportButton.style.opacity = allValid ? '1' : '0.5';
-                exportButton.style.cursor = allValid ? 'pointer' : 'not-allowed';
-            }
-            
-            return allValid;
-        }
-
-        function openExportModal() {
-            if (selectedServices.size === 0) {
-                showExportSelectionHint();
-                return;
-            }
-            hideExportSelectionHint();
-            
-            const config = document.getElementById('exportConfig');
-            config.innerHTML = '';
-            
-            selectedServices.forEach(serviceStr => {
-                const service = JSON.parse(serviceStr);
-                config.innerHTML += `
-                    <div class="export-service-item">
-                        <div class="export-service-name">${service.name}</div>
-                        <div class="export-service-controls">
-                            <label>Number of latest logs:</label>
-                            <input type="number" id="logs-count-${service.id}" value="100" min="1" max="${MAX_LOG_ROWS}" />
-                            <span class="export-limit-hint" style="font-size: 12px; color: #999; margin-left: 10px;">Max: ${MAX_LOG_ROWS.toLocaleString()}</span>
-                        </div>
-                        <div class="export-error-msg-${service.id}" style="color: #f44336; font-size: 12px; margin-top: 5px; display: none; font-weight: 600;"></div>
-                    </div>
-                `;
-            });
-            
-            // Add input validation listeners
-            selectedServices.forEach(serviceStr => {
-                const service = JSON.parse(serviceStr);
-                const input = document.getElementById(`logs-count-${service.id}`);
-                input.addEventListener('input', validateExportInputs);
-                input.addEventListener('change', validateExportInputs);
-            });
-            
-            // Initial validation
-            validateExportInputs();
-            
-            document.getElementById('exportModal').classList.add('show');
-        }
-
-        function closeExportModal() {
-            document.getElementById('exportModal').classList.remove('show');
-        }
-
-        async function performExport() {
-            // Validate before exporting
-            if (!validateExportInputs()) {
-                return;
-            }
-            
-            const exportButton = document.getElementById('performExportBtn');
-            exportButton.disabled = true;
-            exportButton.textContent = 'Exporting...';
-            
-            try {
-                let exportText = '========================================\n';
-                exportText += 'SERVICE LOGS EXPORT\n';
-                exportText += `Export Date: ${new Date().toISOString()}\n`;
-                exportText += '========================================\n\n';
-                let hasErrors = false;
-                
-                for (const serviceStr of selectedServices) {
-                    const service = JSON.parse(serviceStr);
-                    const logCount = parseInt(document.getElementById(`logs-count-${service.id}`).value);
-                    
-                    exportText += `\n${'='.repeat(80)}\n`;
-                    exportText += `SERVICE: ${service.name}\n`;
-                    exportText += `${'='.repeat(80)}\n\n`;
-                    
-                    try {
-                        const response = await fetch(`${API_URL}/logs/${service.id}?nodeName=${currentNodeName}&type=latest&count=${logCount}`);
-                        
-                        if (!response.ok) {
-                            const errorData = await response.json();
-                            if (response.status === 400 && errorData.error && errorData.error.includes('exceeds maximum')) {
-                                exportText += `ERROR: Log count exceeds maximum limit of ${errorData.maxLimit || MAX_LOG_ROWS} logs.\n`;
-                                hasErrors = true;
-                            } else {
-                                exportText += `Error fetching logs: ${errorData.error || 'Unknown error'}\n`;
-                                hasErrors = true;
-                            }
-                        } else {
-                            const logs = await response.json();
-                            
-                            if (logs.length === 0) {
-                                exportText += 'No logs available for this service.\n';
-                            } else {
-                                exportText += `Exported ${logs.length} log(s):\n\n`;
-                                logs.forEach(log => {
-                                    const timestamp = new Date(log.timestamp).toLocaleString();
-                                    exportText += `[${timestamp}] [${log.level.toUpperCase()}] ${log.message}\n`;
-                                    if (log.flowId) {
-                                        exportText += `  Flow ID: ${log.flowId}\n`;
-                                    }
-                                    exportText += '\n';
-                                });
-                            }
-                        }
-                    } catch (err) {
-                        exportText += `Error fetching logs: ${err.message}\n`;
-                        hasErrors = true;
-                    }
-                }
-                
-                exportText += `\n${'='.repeat(80)}\n`;
-                exportText += hasErrors ? 'EXPORT COMPLETED WITH ERRORS\n' : 'END OF EXPORT\n';
-                exportText += `${'='.repeat(80)}\n`;
-                
-                // Create and download file
-                const blob = new Blob([exportText], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `service-logs-export-${new Date().toISOString().split('T')[0]}.txt`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                
-                // Clear selected services and uncheck all checkboxes
-                selectedServices.clear();
-                document.querySelectorAll('.service-checkbox').forEach(checkbox => {
-                    checkbox.checked = false;
-                });
-                
-                closeExportModal();
-            } catch (err) {
-                alert('Error exporting logs: ' + err.message);
-            } finally {
-                exportButton.disabled = false;
-                exportButton.textContent = 'Export to File';
-            }
-        }
-
-        // Close modal on outside click
-        document.getElementById('exportModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeExportModal();
-            }
-        });
-
         // Show UI immediately - no blocking
         document.getElementById('loading').style.display = 'none';
         document.getElementById('content').style.display = 'block';
         document.getElementById('error').classList.remove('show');
         
-        // Show messages section on initial load (no node selected)
-        document.querySelector('.section').style.display = 'none';
         document.querySelector('.messages-section').style.display = 'block';
-        document.getElementById('exportControl').style.display = 'none';
-        // Hide usage stats on initial load (no node selected)
-        document.getElementById('usageStats').style.display = 'none';
         // Hide the healthy/unhealthy dropdown on initial load \u2014 unhealthy view is the default.
-        const _fsLabelInit = document.getElementById('filterStatusLabel');
-        if (_fsLabelInit) _fsLabelInit.style.display = 'none';
-        const _messageNodeFilterLabelInit = document.getElementById('messageNodeFilterLabel');
-        if (_messageNodeFilterLabelInit) _messageNodeFilterLabelInit.style.display = '';
-        // Initial view is Home — move Search + Filter-by-Node into the dropdown.
-        placeUnhealthyFilters(true);
-        
         updateFavicon();
 
-        // Load nodes list (fast - doesn't block)
-        loadNodes();
-        
-        // Fetch messages immediately - use cached response if available
+        // Fetch messages immediately so the unhealthy summary shows fast.
         fetch(API_URL + '/messages')
             .then(resp => resp.ok ? resp.json() : [])
             .then(renderMessages)
             .catch(e => console.error('Initial messages error:', e));
-        
-        // Auto-refresh every 5 seconds
+
+        // Build the board now, then auto-refresh everything every 5 seconds.
+        fetchData();
         refreshInterval = setInterval(fetchData, 5000);
     </script>
 </body>

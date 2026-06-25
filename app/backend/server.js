@@ -1141,6 +1141,47 @@ async function getDiskUsage() {
   }
 }
 
+// Instantaneous CPU%: /proc/stat counters are cumulative since boot, so a single
+// read only yields the lifetime average (which barely moves and never reflects a
+// live spike). We keep the previous sample per node and report the delta between
+// the two most recent reads -> true CPU load over the polling interval.
+// `rawStatLine` is the "cpu  <user> <nice> <system> <idle> <iowait> ..." line.
+const cpuSnap = new Map(); // nodeName -> { idle, total }
+function instantCpuFromStatLine(nodeName, rawStatLine) {
+  const nums = String(rawStatLine).trim().split(/\s+/).slice(1).map(Number).filter(n => Number.isFinite(n));
+  if (nums.length < 4) return null;
+  const idle = nums[3];                         // idle jiffies (matches prior idle=$5 field)
+  const total = nums.reduce((a, b) => a + b, 0);
+  const prev = cpuSnap.get(nodeName);
+  cpuSnap.set(nodeName, { idle, total });
+  if (prev && total > prev.total) {
+    const dTotal = total - prev.total;
+    const dIdle = Math.max(0, idle - prev.idle);
+    return Math.max(0, Math.min(100, 100 * (1 - dIdle / dTotal)));
+  }
+  // First sample for this node (no delta yet): fall back to since-boot average.
+  return total > 0 ? 100 * ((total - idle) / total) : 0;
+}
+
+// Instantaneous CPU%: /proc/stat counters are cumulative since boot, so a single
+// read only yields the lifetime average (which barely moves and never reflects a
+// live spike). We sample the "cpu ..." line twice ~250ms apart within the request
+// and report the busy fraction over that window -> real current CPU load. This is
+// self-contained per request, so concurrent callers can't skew each other.
+function parseProcStatCpu(line) {
+  const nums = String(line).trim().split(/\s+/).slice(1).map(Number).filter(n => Number.isFinite(n));
+  if (nums.length < 4) return null;
+  return { idle: nums[3], total: nums.reduce((a, b) => a + b, 0) };
+}
+function cpuPercentFromSamples(line1, line2) {
+  const a = parseProcStatCpu(line1), b = parseProcStatCpu(line2);
+  if (!a || !b) return null;
+  const dTotal = b.total - a.total;
+  if (dTotal <= 0) return b.total > 0 ? 100 * ((b.total - b.idle) / b.total) : 0; // fallback to since-boot
+  const dIdle = Math.max(0, b.idle - a.idle);
+  return Math.max(0, Math.min(100, 100 * (1 - dIdle / dTotal)));
+}
+
 // Get system usage statistics for selected node
 app.get('/api/usage', async (req, res) => {
   try {
@@ -1160,8 +1201,12 @@ app.get('/api/usage', async (req, res) => {
 
     if (config.type === 'local') {
       try {
-        const { stdout: statOutput } = await execPromise(`grep "^cpu " /proc/stat | awk '{idle=$5; sum=$2+$3+$4+$5+$6+$7+$8+$9+$10; print 100*((sum-idle)/sum)}'`);
-        cpuUsage = parseFloat(statOutput.trim()) || 0;
+        // Two samples ~250ms apart -> live CPU over that window.
+        const { stdout: s1 } = await execPromise(`grep "^cpu " /proc/stat`);
+        await new Promise(r => setTimeout(r, 500));
+        const { stdout: s2 } = await execPromise(`grep "^cpu " /proc/stat`);
+        const v = cpuPercentFromSamples(s1, s2);
+        cpuUsage = v == null ? 0 : v;
       } catch {}
       try {
         const { stdout } = await execPromise(`awk '/^MemTotal:/ {total=$2} /^MemAvailable:/ {avail=$2} END {printf "%.1f", (total-avail)/total*100}' /proc/meminfo`);
@@ -1173,8 +1218,11 @@ app.get('/api/usage', async (req, res) => {
       } catch {}
     } else {
       try {
-        const cpuOut = await docker.execHost(`grep "^cpu " /proc/stat | awk '{idle=$5; sum=$2+$3+$4+$5+$6+$7+$8+$9+$10; print 100*((sum-idle)/sum)}'`);
-        cpuUsage = parseFloat(String(cpuOut).trim()) || 0;
+        // Two samples ~250ms apart in a single SSH round-trip -> live CPU.
+        const cpuOut = await docker.execHost(`grep "^cpu " /proc/stat; sleep 0.5; grep "^cpu " /proc/stat`);
+        const lines = String(cpuOut).trim().split('\n').filter(l => /^cpu\s/.test(l));
+        const v = lines.length >= 2 ? cpuPercentFromSamples(lines[0], lines[1]) : null;
+        cpuUsage = v == null ? 0 : v;
       } catch {}
       try {
         const memOut = await docker.execHost(`awk '/^MemTotal:/ {total=$2} /^MemAvailable:/ {avail=$2} END {printf "%.1f", (total-avail)/total*100}' /proc/meminfo`);
@@ -1483,7 +1531,19 @@ app.get('/api/logs/:serviceId', async (req, res) => {
       docker = await docker.getSwarmDocker();
     }
 
-    const serviceInfo = await docker.getService(serviceId).inspect();
+    // A stale/removed serviceId makes inspect() throw "no such service". Treat
+    // that as a clean 404 instead of a generic 500 (the service may have been
+    // removed between the board loading and this request).
+    let serviceInfo;
+    try {
+      serviceInfo = await docker.getService(serviceId).inspect();
+    } catch (inspectErr) {
+      if (/no such service|not found|404/i.test(inspectErr.message || '')) {
+        console.log(`[/api/logs/${serviceId}] Service not found: ${inspectErr.message}`);
+        return res.status(404).json({ error: 'Service not found', serviceId });
+      }
+      throw inspectErr;
+    }
     console.log(`[/api/logs/${serviceId}] Service name: ${serviceInfo.Spec.Name}, getting tasks...`);
 
     // skipContainerLookup: the SSH primary path uses `docker service logs <id>`
