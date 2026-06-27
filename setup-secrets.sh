@@ -10,6 +10,7 @@ TTY=/dev/tty
 NODES_SECRET_NAME="nodes_config"
 HARD_CODED_SSH_PORT=22
 MAX_REMOTE_NODES=20
+MAX_NODE_NAME_LEN=10
 
 if [ ! -r "$TTY" ]; then
     echo "ERROR: No interactive terminal available ($TTY not readable)."
@@ -64,10 +65,14 @@ fi
 for (( i=1; i<=NODE_COUNT; i++ )); do
     echo "Remote node ${i}/${NODE_COUNT}"
     while true; do
-        read -r -p "Node name: " NODE_NAME <"$TTY"
+        read -r -p "Node name (max ${MAX_NODE_NAME_LEN} chars): " NODE_NAME <"$TTY"
         NODE_NAME="${NODE_NAME//[$'\t\r\n']/}"
         if [ -z "$NODE_NAME" ]; then
             echo "Node name cannot be empty."
+            continue
+        fi
+        if [ "${#NODE_NAME}" -gt "$MAX_NODE_NAME_LEN" ]; then
+            echo "Node name too long (${#NODE_NAME} chars). Max is ${MAX_NODE_NAME_LEN}."
             continue
         fi
         break
@@ -116,12 +121,13 @@ for (( i=1; i<=NODE_COUNT; i++ )); do
     echo ""
 done
 
-nodes_json=$(python3 - "$tmp_rows_file" "$HARD_CODED_SSH_PORT" <<'PY'
+nodes_json=$(python3 - "$tmp_rows_file" "$HARD_CODED_SSH_PORT" "$MAX_NODE_NAME_LEN" <<'PY'
 import json
 import sys
 
 rows_path = sys.argv[1]
 port = int(sys.argv[2])
+max_name_len = int(sys.argv[3])
 nodes = []
 seen = set()
 
@@ -136,6 +142,9 @@ with open(rows_path, 'r', encoding='utf-8') as f:
         name, host, username, password = [p.strip() for p in parts]
         if not name or not host or not username or not password:
             continue
+        if len(name) > max_name_len:
+            print(f"ERROR: Node name too long ({len(name)} chars, max {max_name_len}): {name}", file=sys.stderr)
+            sys.exit(2)
         if name in seen:
             print(f"ERROR: Duplicate node name: {name}", file=sys.stderr)
             sys.exit(2)

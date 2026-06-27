@@ -384,7 +384,8 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 8px;
+            gap: 6px;
+            min-height: 52px;   /* keep headers level even when a name wraps to 2 lines */
             overflow: hidden;   /* narrow columns clip rather than force page scroll */
         }
 
@@ -398,7 +399,7 @@
             font-weight: 600;
             color: #e5e7eb;
             text-align: left;
-            flex: 0 1 56px;
+            flex: 0 0 auto;
             min-width: 0;
             overflow: hidden;
             white-space: nowrap;
@@ -411,17 +412,21 @@
         }
         .node-head-usage .nh-muted { color: #9aa3b2; font-style: italic; }
 
-        /* Center: node name (stays in the middle). */
+        /* Center: node name (stays in the middle). Wraps instead of truncating so
+           the full name is always visible, even with 10 narrow columns. Node names
+           are capped at 10 chars (see setup-secrets.sh), so 1-2 lines always fit. */
         .node-head-name {
             flex: 1 1 auto;
             text-align: center;
             font-weight: 700;
-            font-size: 14px;
-            letter-spacing: 0.3px;
+            font-size: 13px;
+            letter-spacing: 0.2px;
+            line-height: 1.15;
             min-width: 0;
             overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         /* Right block: healthy / unhealthy service counts (x/y). */
@@ -429,7 +434,7 @@
             display: flex;
             flex-direction: column;
             align-items: stretch;
-            flex: 0 1 56px;
+            flex: 0 0 auto;
             min-width: 0;
             font-size: 14px;
             font-weight: 800;
