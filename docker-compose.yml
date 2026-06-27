@@ -1,10 +1,6 @@
 services:
   backend:
-    image: monitor-backend:1.1.2
-    ports:
-      - "3001:3001"
-    environment:
-      - NODE_ENV=production
+    image: monitor-backend:v1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     secrets:
@@ -21,12 +17,9 @@ services:
       - monitor-network
 
   frontend:
-    image: monitor-frontend:1.0.0
+    image: monitor-frontend:v1
     ports:
       - "8081:80"
-    volumes:
-      - ./app/frontend:/usr/share/nginx/html:ro
-      - ./app/frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     deploy:
       replicas: ${FRONTEND_REPLICAS:-1}
       restart_policy:
