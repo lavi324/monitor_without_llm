@@ -2539,33 +2539,65 @@
             appFaviconLoadStarted = true;
             const img = new Image();
             img.onload = () => {
+                const size = 64;
                 const canvas = document.createElement('canvas');
-                canvas.width = 64;
-                canvas.height = 64;
+                canvas.width = size;
+                canvas.height = size;
                 const ctx = canvas.getContext('2d');
                 if (!ctx) {
                     applyAppFavicon();
                     return;
                 }
 
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                // The source PNG is a 200x200 square with the "TA9" wordmark floating
+                // in a lot of empty margin, which made the tab icon look tiny. Detect
+                // the logo's actual content bounds and crop to them, so we can scale
+                // just the ink to fill the icon. Falls back to the full image if the
+                // pixel read fails (e.g. a cross-origin taint).
+                let sx = 0, sy = 0, sw = img.width, sh = img.height;
+                try {
+                    const tc = document.createElement('canvas');
+                    tc.width = img.width;
+                    tc.height = img.height;
+                    const tctx = tc.getContext('2d');
+                    tctx.drawImage(img, 0, 0);
+                    const px = tctx.getImageData(0, 0, img.width, img.height).data;
+                    let minX = img.width, minY = img.height, maxX = -1, maxY = -1;
+                    for (let y = 0; y < img.height; y++) {
+                        for (let x = 0; x < img.width; x++) {
+                            const i = (y * img.width + x) * 4;
+                            // background = transparent or near-white
+                            if (px[i + 3] > 16 && !(px[i] > 238 && px[i + 1] > 238 && px[i + 2] > 238)) {
+                                if (x < minX) minX = x;
+                                if (x > maxX) maxX = x;
+                                if (y < minY) minY = y;
+                                if (y > maxY) maxY = y;
+                            }
+                        }
+                    }
+                    if (maxX >= minX && maxY >= minY) {
+                        sx = minX; sy = minY; sw = maxX - minX + 1; sh = maxY - minY + 1;
+                    }
+                } catch (e) { /* keep full-image fallback */ }
+
+                ctx.clearRect(0, 0, size, size);
 
                 const radius = 14;
-                const pad = 4;
+                const pad = 3;
 
                 ctx.beginPath();
                 ctx.moveTo(pad + radius, pad);
-                ctx.lineTo(canvas.width - pad - radius, pad);
-                ctx.quadraticCurveTo(canvas.width - pad, pad, canvas.width - pad, pad + radius);
-                ctx.lineTo(canvas.width - pad, canvas.height - pad - radius);
-                ctx.quadraticCurveTo(canvas.width - pad, canvas.height - pad, canvas.width - pad - radius, canvas.height - pad);
-                ctx.lineTo(pad + radius, canvas.height - pad);
-                ctx.quadraticCurveTo(pad, canvas.height - pad, pad, canvas.height - pad - radius);
+                ctx.lineTo(size - pad - radius, pad);
+                ctx.quadraticCurveTo(size - pad, pad, size - pad, pad + radius);
+                ctx.lineTo(size - pad, size - pad - radius);
+                ctx.quadraticCurveTo(size - pad, size - pad, size - pad - radius, size - pad);
+                ctx.lineTo(pad + radius, size - pad);
+                ctx.quadraticCurveTo(pad, size - pad, pad, size - pad - radius);
                 ctx.lineTo(pad, pad + radius);
                 ctx.quadraticCurveTo(pad, pad, pad + radius, pad);
                 ctx.closePath();
 
-                const bg = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+                const bg = ctx.createLinearGradient(0, 0, size, size);
                 bg.addColorStop(0, '#f6f3ff');
                 bg.addColorStop(1, '#ffffff');
                 ctx.fillStyle = bg;
@@ -2575,15 +2607,17 @@
                 ctx.lineWidth = 2;
                 ctx.stroke();
 
-                const targetWidth = 52;
-                const targetHeight = 30;
-                const scale = Math.min(targetWidth / img.width, targetHeight / img.height);
-                const drawWidth = img.width * scale;
-                const drawHeight = img.height * scale;
-                const dx = (canvas.width - drawWidth) / 2;
-                const dy = (canvas.height - drawHeight) / 2;
+                // Scale the cropped logo to fill nearly the whole icon (small inner margin).
+                const inner = size - pad * 2 - 4;
+                const scale = Math.min(inner / sw, inner / sh);
+                const drawWidth = sw * scale;
+                const drawHeight = sh * scale;
+                const dx = (size - drawWidth) / 2;
+                const dy = (size - drawHeight) / 2;
 
-                ctx.drawImage(img, dx, dy, drawWidth, drawHeight);
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(img, sx, sy, sw, sh, dx, dy, drawWidth, drawHeight);
                 appFaviconDataUrl = canvas.toDataURL('image/png');
                 applyAppFavicon();
             };

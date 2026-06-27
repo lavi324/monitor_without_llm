@@ -21,7 +21,11 @@ services:
     ports:
       - "8081:80"
     volumes:
-      - ./app/frontend/index.html:/usr/share/nginx/html/index.html:ro
+      # Mount the whole dir (not the single index.html file): a single-file bind
+      # mount pins the inode at container-start, so editor saves (which write a new
+      # inode) never show up without recreating the task. A directory mount resolves
+      # index.html per request, so edits appear on a simple browser refresh.
+      - ./app/frontend:/usr/share/nginx/html:ro
       - ./app/frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     deploy:
       replicas: ${FRONTEND_REPLICAS:-1}
