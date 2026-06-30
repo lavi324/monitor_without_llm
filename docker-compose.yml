@@ -1,6 +1,6 @@
 services:
   backend:
-    image: monitor-backend:v1
+    image: monitor-backend:v2
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     secrets:
