@@ -58,12 +58,15 @@ To add/remove/update remote nodes:
 A) Remove the monitor Docker Sworm stack and wait a minute: 
 docker stack rm monitor
 
-B) Navigate to the directory that contains setup-secrets.sh (monitor/setup-secrets.sh)
+B) Remove the Docker Secret:
+docker secret rm nodes_config
 
-C) Re-run the Docker secret script:
+C) Navigate to the directory that contains setup-secrets.sh (monitor/setup-secrets.sh)
+
+D) Re-run the Docker secret script:
 ./setup-secrets.sh
 
-D) Redeploy:
+E) Redeploy:
 ./deploy.sh -f monitor
 
 
